@@ -1,0 +1,158 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL_MYSQL")
+}
+
+enum UserRole {
+  ADMIN
+  RECEPTIONIST
+  SECURITY
+  EMPLOYEE
+}
+
+enum UserLocation {
+  HEAD_OFFICE
+  NAKURU_BRANCH
+  ELDORET_BRANCH
+  MERU_BRANCH
+  NAIROBI_CBD_BRANCH
+  THIKA_BRANCH
+}
+
+enum UserFloor {
+  GROUND_FLOOR
+  FIRST_FLOOR
+  SECOND_FLOOR
+}
+
+enum VisitStatus {
+  PENDING
+  CHECKED_IN
+  CHECKED_OUT
+  CANCELLED
+}
+
+enum CardStatus {
+  ACTIVE
+  EXPIRED
+  LOST
+  RETURNED
+}
+
+enum PreRegistrationStatus {
+  PENDING
+  CONVERTED
+  CANCELLED
+}
+
+model User {
+  id           String       @id @default(cuid())
+  userLoginId  String       @unique
+  fullName     String
+  email        String       @unique
+  location     UserLocation
+  floor        UserFloor?
+  passwordHash String
+  role         UserRole
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  createdVisits          Visit[]           @relation("VisitCreatedBy")
+  hostedVisits           Visit[]           @relation("VisitHostedBy")
+  hostedPreRegistrations PreRegistration[] @relation("PreRegistrationHostedBy")
+  preRegistrations       PreRegistration[] @relation("PreRegistrationCreatedBy")
+}
+
+model Visitor {
+  id              String   @id @default(cuid())
+  fullName        String
+  company         String?
+  phone           String?
+  email           String?
+  idType          String?
+  idNumber        String?  @unique
+  blacklisted     Boolean  @default(false)
+  blacklistReason String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  visits           Visit[]
+  preRegistrations PreRegistration[]
+
+  @@index([fullName])
+  @@index([company])
+}
+
+model Visit {
+  id              String      @id @default(cuid())
+  visitorId       String
+  hostUserId      String
+  createdByUserId String
+  status          VisitStatus @default(PENDING)
+  purpose         String?
+  notes           String?
+  expectedAt      DateTime?
+  checkInAt       DateTime?
+  checkOutAt      DateTime?
+  cancelledAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  visitor       Visitor    @relation(fields: [visitorId], references: [id], onDelete: Restrict)
+  hostUser      User       @relation("VisitHostedBy", fields: [hostUserId], references: [id], onDelete: Restrict)
+  createdByUser User       @relation("VisitCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  guestCard     GuestCard?
+
+  @@index([status])
+  @@index([expectedAt])
+  @@index([checkInAt])
+}
+
+model GuestCard {
+  id         String     @id @default(cuid())
+  visitId    String     @unique
+  cardNumber String
+  status     CardStatus @default(ACTIVE)
+  issuedAt   DateTime   @default(now())
+  expiresAt  DateTime
+  returnedAt DateTime?
+  notes      String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  visit Visit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  @@index([cardNumber, status])
+}
+
+model PreRegistration {
+  id               String                @id @default(cuid())
+  visitorId        String?
+  fullName         String
+  company          String?
+  phone            String?
+  email            String?
+  idType           String?
+  idNumber         String?
+  hostUserId       String
+  createdByUserId  String
+  expectedAt       DateTime
+  purpose          String?
+  notes            String?
+  status           PreRegistrationStatus @default(PENDING)
+  convertedVisitId String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  visitor       Visitor? @relation(fields: [visitorId], references: [id], onDelete: SetNull)
+  hostUser      User     @relation("PreRegistrationHostedBy", fields: [hostUserId], references: [id], onDelete: Restrict)
+  createdByUser User     @relation("PreRegistrationCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([status])
+  @@index([expectedAt])
+}

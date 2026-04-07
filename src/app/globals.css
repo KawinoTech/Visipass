@@ -1,0 +1,116 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --brand-orange: #ea580c;
+  --brand-orange-dark: #c2410c;
+  --brand-blue: #3b82f6;
+  --brand-primary: #ea580c;
+  --brand-primary-dark: #c2410c;
+  --bg: #ffffff;
+  --text: #111827;
+  /* Safe max content width; pages can use this for centered columns */
+  --app-max-width: min(100%, 1280px);
+
+  /* Forms / cards (light) — used by create user & similar pages */
+  --vp-page-bg: #f8fafc;
+  --vp-card-bg: #ffffff;
+  --vp-card-border: #e5e7eb;
+  --vp-card-shadow: 0 18px 30px rgba(148, 163, 184, 0.35);
+  --vp-title: #0f172a;
+  --vp-subtitle: #475569;
+  --vp-label: #334155;
+  --vp-label-hint: #64748b;
+  --vp-input-bg: #ffffff;
+  --vp-input-text: #0f172a;
+  --vp-input-border: #d1d5db;
+  --vp-input-focus-ring: rgba(59, 130, 246, 0.2);
+  --vp-email-domain-bg: #f1f5f9;
+  --vp-email-domain-text: #334155;
+  --vp-secondary-btn-bg: #ffffff;
+  --vp-secondary-btn-text: #0f172a;
+  --vp-secondary-btn-border: #d1d5db;
+  --vp-msg-success-bg: rgba(16, 185, 129, 0.12);
+  --vp-msg-success-text: #065f46;
+  --vp-msg-success-border: rgba(16, 185, 129, 0.25);
+  --vp-msg-error-bg: rgba(239, 68, 68, 0.12);
+  --vp-msg-error-text: #7f1d1d;
+  --vp-msg-error-border: rgba(239, 68, 68, 0.25);
+  --vp-field-error: #b91c1c;
+  --vp-input-error-border: #ef4444;
+  --vp-input-error-ring: rgba(239, 68, 68, 0.15);
+}
+
+html[data-theme="dark"] {
+  --bg: #0b1220;
+  --text: #e5e7eb;
+
+  --vp-page-bg: #0b1220;
+  --vp-card-bg: #111827;
+  --vp-card-border: #334155;
+  --vp-card-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  --vp-title: #f1f5f9;
+  --vp-subtitle: #94a3b8;
+  --vp-label: #cbd5e1;
+  --vp-label-hint: #94a3b8;
+  --vp-input-bg: #0f172a;
+  --vp-input-text: #f1f5f9;
+  --vp-input-border: #475569;
+  --vp-input-focus-ring: rgba(59, 130, 246, 0.25);
+  --vp-email-domain-bg: #1e293b;
+  --vp-email-domain-text: #e2e8f0;
+  --vp-secondary-btn-bg: #1e293b;
+  --vp-secondary-btn-text: #e2e8f0;
+  --vp-secondary-btn-border: #475569;
+  --vp-msg-success-bg: rgba(16, 185, 129, 0.15);
+  --vp-msg-success-text: #6ee7b7;
+  --vp-msg-success-border: rgba(16, 185, 129, 0.35);
+  --vp-msg-error-bg: rgba(239, 68, 68, 0.18);
+  --vp-msg-error-text: #fecaca;
+  --vp-msg-error-border: rgba(239, 68, 68, 0.35);
+  --vp-field-error: #fca5a5;
+  --vp-input-error-border: #f87171;
+  --vp-input-error-ring: rgba(248, 113, 113, 0.2);
+}
+
+html {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  font-family: Calibri, "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+/* Media and wide content should not force horizontal scroll */
+img,
+picture,
+video,
+canvas,
+svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Common layout roots: stay within viewport */
+main,
+section,
+article {
+  max-width: 100%;
+}
+
+/* Flex/grid children that would otherwise refuse to shrink */
+main,
+section {
+  min-width: 0;
+}

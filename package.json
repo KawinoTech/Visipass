@@ -1,0 +1,41 @@
+{
+  "name": "visipass",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "db:init": "prisma db push --skip-generate --schema prisma/schema.mysql.prisma",
+    "db:init:mysql": "prisma db push --skip-generate --schema prisma/schema.mysql.prisma",
+    "db:init:postgres": "prisma db push --skip-generate --schema prisma/schema.postgresql.prisma",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "prisma:generate": "prisma generate --schema prisma/schema.mysql.prisma",
+    "prisma:generate:mysql": "prisma generate --schema prisma/schema.mysql.prisma",
+    "prisma:generate:postgres": "prisma generate --schema prisma/schema.postgresql.prisma",
+    "prisma:migrate": "prisma migrate dev --schema prisma/schema.mysql.prisma",
+    "prisma:migrate:mysql": "prisma migrate dev --schema prisma/schema.mysql.prisma",
+    "prisma:migrate:postgres": "prisma migrate dev --schema prisma/schema.postgresql.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.6.0",
+    "bcryptjs": "^3.0.2",
+    "jsonwebtoken": "^9.0.2",
+    "next": "^15.2.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@tailwindcss/postcss": "^4.2.2",
+    "@types/node": "^22.14.1",
+    "@types/react": "^19.0.12",
+    "@types/react-dom": "^19.0.4",
+    "postcss": "^8.5.8",
+    "prisma": "^6.6.0",
+    "tailwindcss": "^4.2.2",
+    "typescript": "^5.8.2"
+  }
+}

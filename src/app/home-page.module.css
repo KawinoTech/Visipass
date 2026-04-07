@@ -1,0 +1,140 @@
+.page {
+  min-height: 100vh;
+  background: var(--vp-page-bg, var(--bg));
+  color: var(--text);
+}
+
+.shell {
+  width: min(1200px, 100% - 32px);
+  margin: 18px auto 28px;
+  display: grid;
+  gap: 18px;
+}
+
+.hero {
+  border: 1px solid var(--vp-card-border);
+  background: linear-gradient(135deg, var(--vp-card-bg), color-mix(in oklab, var(--vp-card-bg), var(--brand-primary) 6%));
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: var(--vp-card-shadow);
+}
+
+.heroTitle {
+  margin: 0;
+  font-size: clamp(24px, 4vw, 34px);
+  font-weight: 900;
+  color: var(--vp-title);
+}
+
+.heroSub {
+  margin: 8px 0 0;
+  color: var(--vp-subtitle);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (min-width: 760px) {
+  .stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.stat {
+  border: 1px solid var(--vp-card-border);
+  border-radius: 14px;
+  background: var(--vp-card-bg);
+  padding: 14px;
+}
+
+.statLabel {
+  margin: 0;
+  color: var(--vp-subtitle);
+  font-size: 13px;
+}
+
+.statValue {
+  margin: 8px 0 0;
+  color: var(--vp-title);
+  font-weight: 900;
+  font-size: 24px;
+}
+
+.sectionTitle {
+  margin: 4px 0;
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--vp-title);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (min-width: 760px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1080px) {
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.card {
+  border: 1px solid var(--vp-card-border);
+  border-radius: 16px;
+  background: var(--vp-card-bg);
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 130ms ease, border-color 130ms ease, box-shadow 130ms ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in oklab, var(--brand-primary), var(--vp-card-border) 55%);
+  box-shadow: 0 14px 28px rgba(2, 6, 23, 0.12);
+}
+
+.cardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.badge {
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  background: var(--brand-primary);
+  border-radius: 999px;
+  padding: 4px 8px;
+}
+
+.arrow {
+  color: var(--vp-label-hint);
+  font-weight: 900;
+}
+
+.cardTitle {
+  margin: 0;
+  color: var(--vp-title);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.cardText {
+  margin: 0;
+  color: var(--vp-subtitle);
+  font-size: 14px;
+}
