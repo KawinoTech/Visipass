@@ -35,3 +35,8 @@ Runtime currently uses `DATABASE_URL_MYSQL`.
   - `npm run prisma:migrate`
   - `npm run db:init`
 - If you switch engines, always regenerate Prisma client first before running the app.
+
+
+DATABASE_URL_POSTGRES="postgresql://dev:vybzkartel@127.0.0.1:5432/visipass?schema=public&sslmode=prefer&connect_timeout=15"
+JWT_SECRET="7CZH0dKFWHH+s+mUUaMEmQw7rxPFt9KwR/9uyelLI0WRkVg7IKkH2WbIIJwSbszx"
+DATABASE_URL_MYSQL="mysql://dev:vybzkartel@127.0.0.1:3306/visipass"
