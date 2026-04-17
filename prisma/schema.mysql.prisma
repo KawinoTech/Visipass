@@ -49,6 +49,11 @@ enum PreRegistrationStatus {
   CANCELLED
 }
 
+enum AuditLogStatus {
+  SUCCESS
+  FAILURE
+}
+
 model User {
   id           String       @id @default(cuid())
   userLoginId  String       @unique
@@ -95,11 +100,14 @@ model Visit {
   createdByUserId String
   status          VisitStatus @default(PENDING)
   purpose         String?
+  personToVisit   String?
+  visitFloor      UserFloor?
   notes           String?
   expectedAt      DateTime?
   checkInAt       DateTime?
   checkOutAt      DateTime?
   cancelledAt     DateTime?
+  visitorConsentAt DateTime?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -143,8 +151,11 @@ model PreRegistration {
   createdByUserId  String
   expectedAt       DateTime
   purpose          String?
+  personToVisit    String?
+  visitFloor       UserFloor?
   notes            String?
   status           PreRegistrationStatus @default(PENDING)
+  visitorConsentAt DateTime?
   convertedVisitId String?
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
@@ -155,4 +166,23 @@ model PreRegistration {
 
   @@index([status])
   @@index([expectedAt])
+}
+
+model AuditLog {
+  id             String         @id @default(cuid())
+  event          String
+  status         AuditLogStatus
+  actorUserId    String?
+  actorLoginId   String?
+  targetUserId   String?
+  targetLoginId  String?
+  message        String?
+  metadata       String?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime       @default(now())
+
+  @@index([event, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([targetUserId, createdAt])
 }

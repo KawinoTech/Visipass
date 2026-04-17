@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Preloader } from "@/components/ui/Preloader";
 import styles from "./login.module.css";
 
 export default function LoginPage() {
@@ -34,7 +35,7 @@ export default function LoginPage() {
         setError(data?.message || "Login failed.");
         return;
       }
-      router.push("/");
+      router.push("/home");
       router.refresh();
     } catch {
       setError("Network error. Please try again.");
@@ -159,32 +160,42 @@ export default function LoginPage() {
               disabled={loading}
             >
               <span className={styles.buttonInner}>
-                {loading ? "Signing in..." : "Sign in"}
+                {loading ? (
+                  <>
+                    <Preloader label="" size="sm" />
+                    Signing in...
+                  </>
+                ) : (
+                  "Sign in"
+                )}
                 {/* Arrow icon */}
-                <svg
-                  className={styles.buttonIcon}
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M5 12h14"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="m13 5 7 7-7 7"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+                {!loading ? (
+                  <svg
+                    className={styles.buttonIcon}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M5 12h14"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="m13 5 7 7-7 7"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                ) : null}
               </span>
             </button>
+
           </form>
         </div>
       </section>

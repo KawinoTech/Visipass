@@ -89,6 +89,10 @@
 }
 
 .card {
+  appearance: none;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
   border: 1px solid var(--vp-card-border);
   border-radius: 16px;
   background: var(--vp-card-bg);

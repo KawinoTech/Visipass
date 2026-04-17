@@ -15,13 +15,19 @@
     "prisma:generate:postgres": "prisma generate --schema prisma/schema.postgresql.prisma",
     "prisma:migrate": "prisma migrate dev --schema prisma/schema.mysql.prisma",
     "prisma:migrate:mysql": "prisma migrate dev --schema prisma/schema.mysql.prisma",
-    "prisma:migrate:postgres": "prisma migrate dev --schema prisma/schema.postgresql.prisma"
+    "prisma:migrate:postgres": "prisma migrate dev --schema prisma/schema.postgresql.prisma",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^6.7.2",
+    "@fortawesome/free-solid-svg-icons": "^6.7.2",
+    "@fortawesome/react-fontawesome": "^0.2.2",
     "@prisma/client": "^6.6.0",
     "bcryptjs": "^3.0.2",
     "jsonwebtoken": "^9.0.2",
     "next": "^15.2.4",
+    "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zod": "^3.24.2"
@@ -36,6 +42,7 @@
     "postcss": "^8.5.8",
     "prisma": "^6.6.0",
     "tailwindcss": "^4.2.2",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "vitest": "^3.2.4"
   }
 }

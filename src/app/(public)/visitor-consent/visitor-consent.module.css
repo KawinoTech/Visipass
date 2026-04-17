@@ -1,0 +1,73 @@
+.page {
+  min-height: 100vh;
+  background: var(--vp-page-bg);
+  color: var(--text);
+  padding: clamp(16px, 4vw, 32px);
+}
+
+.shell {
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  display: grid;
+  gap: 14px;
+}
+
+.card {
+  border: 1px solid var(--vp-card-border);
+  border-radius: 16px;
+  background: var(--vp-card-bg);
+  padding: 18px;
+}
+
+.title {
+  margin: 0;
+  color: var(--vp-title);
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.subtitle {
+  margin: 8px 0 0;
+  color: var(--vp-subtitle);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.body {
+  margin: 14px 0 0;
+  color: var(--vp-subtitle);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.buttonPrimary {
+  margin-top: 16px;
+  width: 100%;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-weight: 800;
+  cursor: pointer;
+  border: 0;
+  background: var(--brand-primary);
+  color: #fff;
+}
+
+.buttonPrimary:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.error {
+  margin: 12px 0 0;
+  color: var(--vp-msg-error-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.success {
+  margin: 12px 0 0;
+  color: var(--vp-msg-success-text);
+  font-size: 14px;
+  font-weight: 700;
+}

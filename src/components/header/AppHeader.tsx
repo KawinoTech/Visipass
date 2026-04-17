@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useThemeStore } from "../../lib/theme/theme-store";
 import styles from "./app-header.module.css";
 
@@ -27,9 +27,8 @@ function UserIcon({ className }: { className?: string }) {
 export default function AppHeader() {
   const { theme, setMode, setAccent, signOut } = useThemeStore();
   const [userOpen, setUserOpen] = useState(false);
+  const [username, setUsername] = useState("User");
   const dropdownRef = useRef<HTMLDivElement | null>(null);
-
-  const username = useMemo(() => "Admin User", []);
 
   useEffect(() => {
     function onDown(e: MouseEvent) {
@@ -43,6 +42,25 @@ export default function AppHeader() {
     window.addEventListener("mousedown", onDown);
     return () => window.removeEventListener("mousedown", onDown);
   }, [userOpen]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/me", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json().catch(() => null);
+        if (!alive) return;
+        const nextName = data?.user?.fullName || data?.user?.userLoginId || "User";
+        setUsername(nextName);
+      } catch {
+        // Keep fallback name when session endpoint is unavailable.
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   return (
     <header className={styles.header}>
@@ -82,12 +100,12 @@ export default function AppHeader() {
 
               <div className={styles.dropdownSection}>
                 <label className={styles.dropdownLabel} htmlFor="header-accent-color">
-                  Accent color
+                  Theme
                 </label>
                 <select
                   id="header-accent-color"
                   className={styles.dropdownSelect}
-                  aria-label="Accent color"
+                  aria-label="Theme"
                   value={theme.accent}
                   onChange={(e) => void setAccent(e.target.value as "orange" | "blue")}
                 >

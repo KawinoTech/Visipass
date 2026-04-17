@@ -1,0 +1,126 @@
+.page {
+  min-height: 100%;
+  padding: 1.25rem;
+}
+
+.shell {
+  max-width: 56rem;
+  margin: 0 auto;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.9rem;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  padding: 1.25rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.4rem;
+  color: #111827;
+}
+
+.subtitle {
+  margin: 0;
+  color: #4b5563;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.pending {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.done {
+  background: #ecfdf5;
+  color: #166534;
+}
+
+.qrWrap {
+  display: grid;
+  gap: 0.9rem;
+  justify-items: center;
+}
+
+.qrImage {
+  width: min(22rem, 100%);
+  height: auto;
+  border-radius: 0.75rem;
+  border: 1px solid #e5e7eb;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: center;
+}
+
+.buttonPrimary,
+.buttonSecondary {
+  border-radius: 0.65rem;
+  border: 1px solid transparent;
+  text-decoration: none;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0.56rem 0.86rem;
+}
+
+.buttonPrimary {
+  background: #111827;
+  color: #fff;
+}
+
+.buttonSecondary {
+  background: #f3f4f6;
+  color: #111827;
+  border-color: #d1d5db;
+}
+
+.linkHint {
+  margin: 0;
+  color: #6b7280;
+  overflow-wrap: anywhere;
+}
+
+.statement {
+  margin: 0;
+  color: #111827;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  padding: 0.85rem;
+}
+
+.error {
+  margin: 0;
+  color: #b91c1c;
+}
+
+.manualBox {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.85rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  background: #f8fafc;
+}
+
+.manualLabel {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  color: #111827;
+}

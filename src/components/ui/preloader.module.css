@@ -1,0 +1,62 @@
+.wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.spinner {
+  border-radius: 999px;
+  border: 3px solid color-mix(in oklab, var(--vp-card-border), transparent 10%);
+  border-top-color: var(--brand-primary);
+  animation: spin 0.75s linear infinite;
+}
+
+.sm {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+
+.md {
+  width: 24px;
+  height: 24px;
+}
+
+.lg {
+  width: 44px;
+  height: 44px;
+  border-width: 4px;
+}
+
+.label {
+  font-size: 14px;
+  font-weight: 700;
+  color: currentColor;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 260;
+  background: color-mix(in oklab, var(--vp-page-bg), transparent 25%);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.overlayCard {
+  min-width: 190px;
+  border: 1px solid var(--vp-card-border);
+  border-radius: 14px;
+  background: var(--vp-card-bg);
+  box-shadow: var(--vp-card-shadow);
+  padding: 16px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
