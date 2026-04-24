@@ -171,6 +171,66 @@
   font-weight: 600;
 }
 
+.phoneInputRow {
+  display: flex;
+  align-items: stretch;
+  border-radius: 12px;
+  background: var(--vp-input-bg);
+  overflow: hidden;
+}
+
+.phoneInputRowBlue {
+  border: 1px solid var(--brand-orange);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-orange) 10%, transparent);
+}
+
+.phoneInputRowOrange {
+  border: 1px solid var(--brand-orange);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-orange) 10%, transparent);
+}
+
+.phoneInputRowBlue:focus-within {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--brand-orange) 10%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--brand-orange) 24%, transparent);
+}
+
+.phoneInputRowOrange:focus-within {
+  outline: none;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--brand-orange) 10%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--brand-orange) 24%, transparent);
+}
+
+.phonePrefix {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 10px 10px 12px;
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--vp-title);
+  background: color-mix(in srgb, var(--vp-page-bg) 50%, var(--vp-input-bg));
+  border-right: 1px solid var(--vp-card-border);
+}
+
+.phoneInputLocal {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 10px 12px;
+  color: var(--vp-input-text);
+  font-size: inherit;
+  box-shadow: none;
+}
+
+.phoneInputLocal:focus {
+  outline: none;
+}
+
 .input,
 .textarea,
 .select {

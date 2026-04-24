@@ -5,15 +5,10 @@ import { useRouter } from "next/navigation";
 import { Preloader } from "@/components/ui/Preloader";
 import styles from "./self-service.module.css";
 
-type Host = {
-  id: string;
-  fullName: string;
-  location: string;
-  floor: "GROUND_FLOOR" | "FIRST_FLOOR" | "SECOND_FLOOR" | null;
-};
-
 type Locale = "en" | "sw";
 type Step = "form" | "consent" | "welcome";
+const PHONE_PREFIX = "+254";
+const KENYAN_PHONE_LOCAL_REGEX = /^(?:7\d{8}|1\d{8})$/;
 
 const ID_TYPES = [
   { value: "Passport", en: "Passport", sw: "Pasipoti" },
@@ -32,11 +27,36 @@ const PURPOSE_OPTIONS = [
   { value: "Maintenance / technical support", en: "Maintenance / technical support", sw: "Matengenezo / msaada wa kiufundi" },
   { value: "Other official business", en: "Other official business", sw: "Shughuli nyingine rasmi" },
 ] as const;
+const ID_RULES = {
+  "National ID": {
+    maxLength: 8,
+    regex: /^\d{7,8}$/,
+    message: "National ID must be 7-8 digits (numbers only).",
+  },
+  Passport: {
+    maxLength: 9,
+    regex: /^[A-Za-z0-9]{6,9}$/,
+    message: "Passport must be 6-9 alphanumeric characters.",
+  },
+  "Driving License": {
+    maxLength: 12,
+    regex: /^[A-Za-z0-9-]{6,12}$/,
+    message: "Driving License must be 6-12 characters (letters, numbers, or -).",
+  },
+} as const;
+
+function getIdNumberValidationError(idType: string, idNumber: string): string | null {
+  if (!idType) return null;
+  const normalized = idNumber.trim();
+  if (!normalized) return "Document number is required.";
+  const rule = ID_RULES[idType as keyof typeof ID_RULES];
+  if (!rule) return null;
+  if (!rule.regex.test(normalized)) return rule.message;
+  return null;
+}
 
 export default function SelfServicePage() {
   const router = useRouter();
-  const [hosts, setHosts] = useState<Host[]>([]);
-  const [loadingHosts, setLoadingHosts] = useState(true);
   const [saving, setSaving] = useState(false);
   const [submittingConsent, setSubmittingConsent] = useState(false);
   const [qrLoading, setQrLoading] = useState(false);
@@ -52,35 +72,14 @@ export default function SelfServicePage() {
   const [fullName, setFullName] = useState("");
   const [company, setCompany] = useState("");
   const [purpose, setPurpose] = useState("");
-  const [phone, setPhone] = useState("");
+  const [phoneLocalDigits, setPhoneLocalDigits] = useState("");
   const [idType, setIdType] = useState("");
   const [idNumber, setIdNumber] = useState("");
-  const defaultHost = useMemo(() => hosts[0] ?? null, [hosts]);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const res = await fetch("/api/public/walk-in", { cache: "no-store" });
-        const data = await res.json().catch(() => null);
-        if (!alive) return;
-        if (!res.ok) {
-          setError(data?.message || "Failed to load hosts.");
-          return;
-        }
-        setHosts((data?.hosts ?? []) as Host[]);
-      } catch {
-        if (!alive) return;
-        setError("Network error while loading host list.");
-      } finally {
-        if (alive) setLoadingHosts(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, []);
+  const [idNumberTouched, setIdNumberTouched] = useState(false);
+  const idNumberValidationError = useMemo(
+    () => (idNumberTouched ? getIdNumberValidationError(idType, idNumber) : null),
+    [idType, idNumber, idNumberTouched]
+  );
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -110,9 +109,10 @@ export default function SelfServicePage() {
     setFullName("");
     setCompany("");
     setPurpose("");
-    setPhone("");
+    setPhoneLocalDigits("");
     setIdType("");
     setIdNumber("");
+    setIdNumberTouched(false);
   }
 
   useEffect(() => {
@@ -186,48 +186,82 @@ export default function SelfServicePage() {
     setError(null);
     setOkMessage(null);
 
-    if (
-      !fullName.trim() ||
-      !company.trim() ||
-      !purpose.trim() ||
-      !idType ||
-      !idNumber.trim() ||
-      !defaultHost
-    ) {
-      setError("Please complete all required fields.");
-      return;
+    const trimmedFullName = fullName.trim();
+    const trimmedCompany = company.trim();
+    const trimmedPurpose = purpose.trim();
+    const trimmedIdNumber = idNumber.trim();
+    const normalizedPhone = phoneLocalDigits.trim();
+    const hasPhoneValue = normalizedPhone.length > 0;
+    const completePhone = hasPhoneValue ? `${PHONE_PREFIX}${normalizedPhone}` : null;
+    const validationErrors: string[] = [];
+
+    if (!trimmedFullName) validationErrors.push("full name");
+    if (!trimmedCompany) validationErrors.push("company");
+    if (!trimmedPurpose) validationErrors.push("purpose");
+    if (!idType) validationErrors.push("document type");
+    if (!trimmedIdNumber) validationErrors.push("document number");
+
+    if (trimmedFullName && trimmedFullName.length < 3) {
+      validationErrors.push("full name must be at least 3 characters");
+    }
+    if (trimmedCompany && trimmedCompany.length < 2) {
+      validationErrors.push("company must be at least 2 characters");
+    }
+    const idNumberRuleError = getIdNumberValidationError(idType, trimmedIdNumber);
+    if (idNumberRuleError) validationErrors.push(idNumberRuleError);
+
+    if (hasPhoneValue && !KENYAN_PHONE_LOCAL_REGEX.test(normalizedPhone)) {
+      validationErrors.push("phone must be 9 digits in Kenyan format (7XXXXXXXX or 1XXXXXXXX)");
     }
 
+    if (validationErrors.length > 0) {
+      setIdNumberTouched(true);
+      console.warn("[SelfService] Validation failed before submission", {
+        reasons: validationErrors,
+        phoneDigitsLength: normalizedPhone.length,
+      });
+      setError("Please complete all required fields correctly.");
+      return;
+    }
+    console.info("[SelfService] Walk-in submission started", {
+      hasPhone: hasPhoneValue,
+      locale,
+    });
     setSaving(true);
     try {
       const res = await fetch("/api/public/walk-in", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fullName: fullName.trim(),
-          company: company.trim(),
-          purpose: purpose.trim(),
-          phone: phone.trim() || null,
+          fullName: trimmedFullName,
+          company: trimmedCompany,
+          purpose: trimmedPurpose,
+          phone: completePhone,
           idType,
-          idNumber: idNumber.trim(),
-          hostUserId: defaultHost.id,
-          personToVisit: defaultHost.fullName,
-          visitFloor: defaultHost.floor ?? "GROUND_FLOOR",
+          idNumber: trimmedIdNumber,
         }),
       });
 
       const data = await res.json().catch(() => null);
       if (!res.ok) {
+        console.error("[SelfService] Walk-in submission failed", {
+          status: res.status,
+          message: data?.message ?? null,
+        });
         setError(data?.message || "Check-in failed. Please ask reception for help.");
         return;
       }
 
       const id = data?.preRegistration?.id as string | undefined;
+      console.info("[SelfService] Walk-in submission succeeded", {
+        preRegistrationId: id ?? null,
+      });
       setOkMessage("Thank you. Your details have been captured.");
       if (id) {
         router.push(`/visitor-consent?preRegistrationId=${encodeURIComponent(id)}`);
       }
-    } catch {
+    } catch (submitError) {
+      console.error("[SelfService] Network error while submitting walk-in details", submitError);
       setError("Network error while submitting your details.");
     } finally {
       setSaving(false);
@@ -238,18 +272,30 @@ export default function SelfServicePage() {
     if (!preRegistrationId || !manualChecked || submittingConsent || consentRecorded) return;
     setSubmittingConsent(true);
     setError(null);
+    console.info("[SelfService] Manual consent submission started", {
+      preRegistrationId,
+    });
     try {
       const res = await fetch(`/api/public/pre-registrations/${encodeURIComponent(preRegistrationId)}/consent`, {
         method: "POST",
       });
       const data = await res.json().catch(() => null);
       if (!res.ok && res.status !== 200) {
+        console.error("[SelfService] Manual consent submission failed", {
+          preRegistrationId,
+          status: res.status,
+          message: data?.message ?? null,
+        });
         setError(data?.message || "Could not record consent.");
         return;
       }
+      console.info("[SelfService] Manual consent submission succeeded", {
+        preRegistrationId,
+      });
       setConsentRecorded(true);
       setStep("welcome");
-    } catch {
+    } catch (consentError) {
+      console.error("[SelfService] Network error while recording manual consent", consentError);
       setError("Network error while recording consent.");
     } finally {
       setSubmittingConsent(false);
@@ -282,8 +328,8 @@ export default function SelfServicePage() {
           <h1 className={styles.title}>{greeting}</h1>
           <p className={styles.subtitle}>
             {locale === "sw"
-              ? "Tunafurahi kukupokea. Tafadhali jaza taarifa zako hapa chini kwa mchakato rahisi na salama wa kuingia."
-              : "We are delighted to host you. Complete your walk-in details below for a smooth and secure check-in experience."}
+              ? "Tunafurahi kukupokea. Jaza taarifa zako hapa; mapokezi yanakamilisha uingiaji katika Operesheni ya ziara—ndipo unasajiliwa kama mgeni kwenye mfumo (si kabla ya hatua hiyo)."
+              : "We are delighted to host you. Complete your details below; reception finishes check-in at Visit operations—that step creates your visitor record on file (not before)."}
           </p>
         </div>
         <p className={styles.meta}>MUA Kenya - Visitor Management</p>
@@ -341,14 +387,32 @@ export default function SelfServicePage() {
                 <span>
                   <i className="fa-solid fa-phone" aria-hidden /> {locale === "sw" ? "Simu" : "Phone"}
                 </span>
-                <input className={styles.input} value={phone} onChange={(e) => setPhone(e.target.value)} />
+                <div className={styles.phoneInputGroup}>
+                  <span className={styles.phonePrefix}>{PHONE_PREFIX}</span>
+                  <input
+                    className={styles.input}
+                    value={phoneLocalDigits}
+                    onChange={(e) => setPhoneLocalDigits(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder={locale === "sw" ? "Mfano: 712345678" : "Example: 712345678"}
+                    aria-label={locale === "sw" ? "Nambari ya simu bila +254" : "Phone digits without +254"}
+                  />
+                </div>
               </label>
               <label className={styles.field}>
                 <span>
                   <i className="fa-solid fa-passport" aria-hidden />{" "}
                   {locale === "sw" ? "Aina ya kitambulisho *" : "Document type *"}
                 </span>
-                <select className={styles.input} value={idType} onChange={(e) => setIdType(e.target.value)}>
+                <select
+                  className={styles.input}
+                  value={idType}
+                  onChange={(e) => {
+                    setIdType(e.target.value);
+                    setIdNumberTouched(false);
+                  }}
+                >
                   <option value="">{locale === "sw" ? "Chagua aina" : "Select type"}</option>
                   {ID_TYPES.map((t) => (
                     <option key={t.value} value={t.value}>
@@ -362,7 +426,37 @@ export default function SelfServicePage() {
                   <i className="fa-solid fa-hashtag" aria-hidden />{" "}
                   {locale === "sw" ? "Namba ya kitambulisho *" : "Document number *"}
                 </span>
-                <input className={styles.input} value={idNumber} onChange={(e) => setIdNumber(e.target.value)} />
+                <input
+                  className={styles.input}
+                  value={idNumber}
+                  maxLength={idType ? ID_RULES[idType as keyof typeof ID_RULES]?.maxLength : undefined}
+                  onChange={(e) => {
+                    const nextValue = e.target.value;
+                    if (idType === "National ID") {
+                      setIdNumber(nextValue.replace(/\D/g, "").slice(0, ID_RULES["National ID"].maxLength));
+                      return;
+                    }
+                    const maxLength = idType ? ID_RULES[idType as keyof typeof ID_RULES]?.maxLength : undefined;
+                    setIdNumber(maxLength ? nextValue.slice(0, maxLength) : nextValue);
+                  }}
+                  onBlur={() => setIdNumberTouched(true)}
+                  placeholder={
+                    idType === "National ID"
+                      ? locale === "sw"
+                        ? "Namba 7-8 (tarakimu pekee)"
+                        : "7-8 digits only"
+                      : idType === "Passport"
+                        ? locale === "sw"
+                          ? "Herufi/namba 6-9"
+                          : "6-9 letters or numbers"
+                        : idType === "Driving License"
+                          ? locale === "sw"
+                            ? "Herufi/namba/- (6-12)"
+                            : "6-12 chars, letters/numbers/-"
+                          : undefined
+                  }
+                />
+                {idNumberValidationError ? <small className={styles.fieldErrorText}>{idNumberValidationError}</small> : null}
               </label>
               <label className={styles.field}>
                 <span>
@@ -379,7 +473,7 @@ export default function SelfServicePage() {
                 </select>
               </label>
 
-              <button type="submit" className={styles.button} disabled={saving || loadingHosts}>
+              <button type="submit" className={styles.button} disabled={saving}>
                 {saving ? (
                   <Preloader label="Submitting..." size="sm" />
                 ) : locale === "sw" ? (

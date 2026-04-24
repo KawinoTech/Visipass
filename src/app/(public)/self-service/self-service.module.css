@@ -141,6 +141,104 @@
   gap: 6px;
 }
 
+.fieldErrorText {
+  color: #b91c1c;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.searchSelectWrap {
+  position: relative;
+}
+
+.searchSelectList {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.12);
+  max-height: 16rem;
+  overflow: auto;
+}
+
+.searchSelectItem {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 10px 12px;
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+}
+
+.searchSelectItem:hover {
+  background: #eff6ff;
+}
+
+.searchSelectItem span {
+  font-size: 14px;
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.searchSelectItem small {
+  font-size: 12px;
+  color: #475569;
+}
+
+.searchSelectHint {
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.selectedHostChip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  background: #ffffff;
+  min-height: 52px;
+  padding: 10px 12px;
+}
+
+.selectedHostMeta {
+  display: grid;
+  gap: 1px;
+}
+
+.selectedHostMeta strong {
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.selectedHostMeta small {
+  color: #475569;
+  font-size: 12px;
+}
+
+.clearChipButton {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.clearChipButton:hover {
+  background: #f1f5f9;
+}
+
 .input {
   width: 100%;
   border: 1px solid #d1d5db;
@@ -157,6 +255,46 @@
 .input:focus {
   border-color: var(--brand-blue);
   box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+}
+
+.phoneInputGroup {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  background: #ffffff;
+  min-height: 52px;
+  overflow: hidden;
+}
+
+.phoneInputGroup:focus-within {
+  border-color: var(--brand-blue);
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+}
+
+.phonePrefix {
+  min-height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #334155;
+  background: #f8fafc;
+  border-right: 1px solid #e2e8f0;
+}
+
+.phoneInputGroup .input {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.phoneInputGroup .input:focus {
+  border: 0;
+  box-shadow: none;
 }
 
 .field:last-of-type {

@@ -5,10 +5,19 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { Preloader } from "@/components/ui/Preloader";
 import styles from "./visitor-consent.module.css";
 
+const REDIRECT_DELAY_SECONDS = 7;
+
 function VisitorConsentInner() {
   const searchParams = useSearchParams();
   const visitId = searchParams.get("visitId")?.trim() ?? "";
   const preRegistrationId = searchParams.get("preRegistrationId")?.trim() ?? "";
+  const returnTo = searchParams.get("returnTo")?.trim() ?? "";
+  const activeForm = searchParams.get("activeForm")?.trim() ?? "";
+  const autoCheckIn = searchParams.get("autoCheckIn")?.trim() ?? "";
+  const personToVisitUserId = searchParams.get("personToVisitUserId")?.trim() ?? "";
+  const phone = searchParams.get("phone")?.trim() ?? "";
+  const idType = searchParams.get("idType")?.trim() ?? "";
+  const idNumber = searchParams.get("idNumber")?.trim() ?? "";
 
   const context = useMemo(() => {
     if (visitId) return { kind: "visit" as const, id: visitId };
@@ -22,6 +31,8 @@ function VisitorConsentInner() {
   const [alreadyConsented, setAlreadyConsented] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [doneMessage, setDoneMessage] = useState<string | null>(null);
+  const [redirecting, setRedirecting] = useState(false);
+  const [redirectCountdown, setRedirectCountdown] = useState(REDIRECT_DELAY_SECONDS);
 
   useEffect(() => {
     if (context.kind === "none") {
@@ -58,6 +69,37 @@ function VisitorConsentInner() {
       alive = false;
     };
   }, [context.kind, context.id]);
+
+  useEffect(() => {
+    if (!alreadyConsented) return;
+    setRedirecting(true);
+    setRedirectCountdown(REDIRECT_DELAY_SECONDS);
+    const countdownTimer = window.setInterval(() => {
+      setRedirectCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    const timer = window.setTimeout(() => {
+      if (returnTo) {
+        const next = new URLSearchParams();
+        next.set("consentDone", "1");
+        if (autoCheckIn) next.set("autoCheckIn", autoCheckIn);
+        if (preRegistrationId) next.set("preRegistrationId", preRegistrationId);
+        if (activeForm) next.set("activeForm", activeForm);
+        if (personToVisitUserId) next.set("personToVisitUserId", personToVisitUserId);
+        if (phone) next.set("phone", phone);
+        if (idType) next.set("idType", idType);
+        if (idNumber) next.set("idNumber", idNumber);
+        const target = `${returnTo}${next.toString() ? `?${next.toString()}` : ""}`;
+        window.location.assign(target);
+        return;
+      }
+      // Use full page navigation so the self-service desk resets completely for the next visitor.
+      window.location.assign("/self-service");
+    }, REDIRECT_DELAY_SECONDS * 1000);
+    return () => {
+      window.clearInterval(countdownTimer);
+      window.clearTimeout(timer);
+    };
+  }, [alreadyConsented, autoCheckIn, returnTo, preRegistrationId, activeForm, personToVisitUserId, phone, idType, idNumber]);
 
   async function onConsent() {
     if (context.kind === "none") return;
@@ -121,6 +163,19 @@ function VisitorConsentInner() {
 
           {error ? <p className={styles.error}>{error}</p> : null}
           {doneMessage ? <p className={styles.success}>{doneMessage}</p> : null}
+          {redirecting ? (
+            <div className={styles.confirmationNote} role="status" aria-live="polite">
+              <span className={styles.tickIcon} aria-hidden>
+                <i className="fa-solid fa-circle-check" />
+              </span>
+              <div className={styles.confirmationText}>
+                <p>Please Proceed to our Reception Desk for further guidance once consent is obtained.</p>
+                <p className={styles.redirectHint}>
+                  Returning to {returnTo ? "visit operations" : "self-service"} in {redirectCountdown}s...
+                </p>
+              </div>
+            </div>
+          ) : null}
 
           {showButton ? (
             <button type="button" className={styles.buttonPrimary} onClick={() => void onConsent()} disabled={submitting}>

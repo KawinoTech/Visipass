@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Preloader } from "@/components/ui/Preloader";
 import styles from "./preregistration.module.css";
 
@@ -8,10 +10,23 @@ type EmployeeOption = {
   id: string;
   fullName: string;
   email: string;
+  floor: "GROUND_FLOOR" | "FIRST_FLOOR" | "SECOND_FLOOR" | null;
 };
 
 export default function PreRegistrationCreatePage() {
-  const FLOORS = ["GROUND_FLOOR", "FIRST_FLOOR", "SECOND_FLOOR"] as const;
+  const router = useRouter();
+  const PURPOSE_OPTIONS = [
+    "Delivery",
+    "Insurance claim follow-up",
+    "Insurance policy inquiry",
+    "Premium payment",
+    "Document submission",
+    "Meeting with staff",
+    "Customer service support",
+    "Interview / recruitment",
+    "Maintenance / technical support",
+    "Other official business",
+  ] as const;
   const [fullName, setFullName] = useState("");
   const [company, setCompany] = useState("");
   const [expectedAt, setExpectedAt] = useState("");
@@ -21,9 +36,35 @@ export default function PreRegistrationCreatePage() {
   const [selectedEmployee, setSelectedEmployee] = useState<EmployeeOption | null>(null);
   const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [employeeListOpen, setEmployeeListOpen] = useState(false);
-  const [visitFloor, setVisitFloor] = useState<(typeof FLOORS)[number] | "">("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [checkingAccess, setCheckingAccess] = useState(true);
+  const [accessAllowed, setAccessAllowed] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/me", { cache: "no-store" });
+        const data = await res.json().catch(() => null);
+        if (!alive) return;
+        const role = data?.user?.role;
+        if (res.ok && (role === "ADMIN" || role === "RECEPTIONIST" || role === "EMPLOYEE")) {
+          setAccessAllowed(true);
+          return;
+        }
+        router.replace("/home");
+      } catch {
+        if (!alive) return;
+        router.replace("/home");
+      } finally {
+        if (alive) setCheckingAccess(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [router]);
 
   useEffect(() => {
     let mounted = true;
@@ -82,8 +123,17 @@ export default function PreRegistrationCreatePage() {
     );
     const resolvedPersonToVisit = selectedEmployee?.fullName ?? matchedEmployee?.fullName ?? rawPersonToVisit;
 
-    if (!fullName.trim() || !company.trim() || !expectedAt || !purpose.trim() || !resolvedPersonToVisit || !visitFloor) {
-      showMessage("error", "Full name, company, expected date/time, purpose, person to visit, and floor are required.");
+    const resolvedEmployee = selectedEmployee ?? matchedEmployee ?? null;
+    if (!fullName.trim() || !expectedAt || !purpose.trim() || !resolvedPersonToVisit) {
+      showMessage("error", "Full name, expected date/time, purpose, and person to visit are required.");
+      return;
+    }
+    if (!resolvedEmployee) {
+      showMessage("error", "Please select who is being visited from the employee list.");
+      return;
+    }
+    if (!resolvedEmployee.floor) {
+      showMessage("error", "Selected employee has no assigned floor. Please update employee profile first.");
       return;
     }
 
@@ -98,7 +148,7 @@ export default function PreRegistrationCreatePage() {
           expectedAt: new Date(expectedAt).toISOString(),
           purpose: purpose.trim(),
           personToVisit: resolvedPersonToVisit,
-          visitFloor,
+          personToVisitUserId: resolvedEmployee.id,
         }),
       });
 
@@ -114,14 +164,26 @@ export default function PreRegistrationCreatePage() {
       setPurpose("");
       setPersonToVisit("");
       setSelectedEmployee(null);
-      setVisitFloor("");
-      showMessage("success", "Pre-registration saved. Check them in from Visit operations when they arrive.");
+      showMessage(
+        "success",
+        "Pre-registration saved. They are not a visitor on file until checked in at Visit operations when they arrive.",
+      );
     } catch {
       showMessage("error", "Network error while submitting pre-registration.");
     } finally {
       setSaving(false);
     }
   }
+
+  if (checkingAccess) {
+    return (
+      <main className={styles.page} style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Preloader label="Checking access..." size="lg" />
+      </main>
+    );
+  }
+
+  if (!accessAllowed) return null;
 
   return (
     <main className={styles.page}>
@@ -132,67 +194,111 @@ export default function PreRegistrationCreatePage() {
       ) : null}
 
       <section className={styles.shell}>
-        <section className={styles.card}>
-          <h1 className={styles.title}>Pre-registration Page</h1>
+        <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+          <Link href="/home" className={styles.breadcrumbLink}>
+            <i className="fa-solid fa-arrow-left" aria-hidden />
+            Back to Home
+          </Link>
+          <span className={styles.breadcrumbCurrent}>Pre-registration</span>
+        </nav>
+
+        <section className={`${styles.card} ${styles.heroCard}`}>
+          <h1 className={styles.title}>Pre-registration</h1>
           <p className={styles.subtitle}>
-            Record expected visitors before arrival. They are checked in at Visit operations, where ID and other details
-            can be added if needed. Data consent is collected there via QR code.
+            Record expected guests before arrival—they are not visitors on file until reception checks them in at Visit
+            operations. ID and other details can be added at the desk; data consent is collected there via QR code.
           </p>
+          <div className={styles.quickStats}>
+            <div className={styles.statPill}>
+              <i className="fa-solid fa-calendar-plus" aria-hidden />
+              Before arrival
+            </div>
+            <div className={styles.statPill}>
+              <i className="fa-solid fa-clipboard-check" aria-hidden />
+              Check-in at Visit operations
+            </div>
+            <div className={styles.statPill}>
+              <i className="fa-solid fa-qrcode" aria-hidden />
+              QR consent after check-in
+            </div>
+          </div>
         </section>
 
         <section className={styles.card}>
+          <h2 className={styles.sectionLabel}>
+            <i className="fa-solid fa-user-clock" style={{ marginRight: 8 }} aria-hidden />
+            New expected guest
+          </h2>
+          <p className={styles.hint}>
+            <i className="fa-solid fa-circle-info" style={{ marginRight: 6 }} aria-hidden />
+            Choose the host from the employee list. The guest becomes a visitor in the system only after check-in at Visit
+            operations.
+          </p>
+          <div className={styles.divider} />
           <form className={styles.grid} onSubmit={onSubmit}>
             <div className={styles.field}>
-              <label className={styles.label} htmlFor="fullName">
-                Visitor full name
+              <label className={`${styles.label} ${styles.labelWithIcon}`} htmlFor="fullName">
+                <i className="fa-solid fa-user" aria-hidden />
+                Guest full name
               </label>
               <input
                 id="fullName"
-                className={styles.input}
+                className={`${styles.input} ${styles.inputBlue}`}
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
               />
             </div>
 
             <div className={styles.field}>
-              <label className={styles.label} htmlFor="company">
-                Company
+              <label className={`${styles.label} ${styles.labelWithIcon} ${styles.labelWithIconOrange}`} htmlFor="company">
+                <i className="fa-solid fa-building" aria-hidden />
+                Company (optional)
               </label>
               <input
                 id="company"
-                className={styles.input}
+                className={`${styles.input} ${styles.inputOrange}`}
                 value={company}
                 onChange={(e) => setCompany(e.target.value)}
               />
             </div>
 
             <div className={styles.field}>
-              <label className={styles.label} htmlFor="expectedAt">
+              <label className={`${styles.label} ${styles.labelWithIcon}`} htmlFor="expectedAt">
+                <i className="fa-solid fa-calendar-day" aria-hidden />
                 Expected date and time
               </label>
               <input
                 id="expectedAt"
                 type="datetime-local"
-                className={styles.input}
+                className={`${styles.input} ${styles.inputBlue}`}
                 value={expectedAt}
                 onChange={(e) => setExpectedAt(e.target.value)}
               />
             </div>
 
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="purpose">
+            <div className={styles.field} style={{ gridColumn: "1 / -1" }}>
+              <label className={`${styles.label} ${styles.labelWithIcon}`} htmlFor="purpose">
+                <i className="fa-solid fa-briefcase" aria-hidden />
                 Purpose of visit
               </label>
-              <textarea
+              <select
                 id="purpose"
-                className={styles.textarea}
+                className={`${styles.select} ${styles.selectBlue}`}
                 value={purpose}
                 onChange={(e) => setPurpose(e.target.value)}
-              />
+              >
+                <option value="">Select purpose</option>
+                {PURPOSE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className={styles.field}>
-              <label className={styles.label} htmlFor="personToVisit">
+              <label className={`${styles.label} ${styles.labelWithIcon}`} htmlFor="personToVisit">
+                <i className="fa-solid fa-user-tie" aria-hidden />
                 Who is being visited
               </label>
               <div className={styles.searchSelectWrap}>
@@ -217,7 +323,7 @@ export default function PreRegistrationCreatePage() {
                 ) : (
                   <input
                     id="personToVisit"
-                    className={styles.input}
+                    className={`${styles.input} ${styles.inputBlue}`}
                     value={personToVisit}
                     onChange={(e) => {
                       setPersonToVisit(e.target.value);
@@ -258,25 +364,6 @@ export default function PreRegistrationCreatePage() {
                   </div>
                 )}
               </div>
-            </div>
-
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="visitFloor">
-                Floor
-              </label>
-              <select
-                id="visitFloor"
-                className={styles.input}
-                value={visitFloor}
-                onChange={(e) => setVisitFloor(e.target.value as (typeof FLOORS)[number] | "")}
-              >
-                <option value="">Select floor</option>
-                {FLOORS.map((floor) => (
-                  <option key={floor} value={floor}>
-                    {floor.replace("_", " ")}
-                  </option>
-                ))}
-              </select>
             </div>
 
             <div className={styles.actions} style={{ gridColumn: "1 / -1" }}>

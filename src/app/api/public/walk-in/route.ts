@@ -10,8 +10,29 @@ const walkInSchema = z.object({
   phone: z.string().trim().max(30).optional().nullable(),
   idType: z.string().trim().min(1, "Document type is required.").max(40),
   idNumber: z.string().trim().min(1, "Document number is required.").max(60),
-  hostUserId: z.string().trim().min(1, "Host selection is required."),
 });
+
+async function resolveSelfServiceRoutingUser() {
+  const preferredLoginId = process.env.SELF_SERVICE_ROUTING_USER_LOGIN_ID?.trim() || null;
+
+  if (preferredLoginId) {
+    const preferred = await prisma.user.findFirst({
+      where: {
+        userLoginId: preferredLoginId,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+    if (preferred) return preferred;
+  }
+
+  // Fallback: any active user account keeps the kiosk independent from role staffing.
+  return prisma.user.findFirst({
+    where: { isActive: true },
+    orderBy: [{ fullName: "asc" }],
+    select: { id: true },
+  });
+}
 
 export async function GET() {
   try {
@@ -54,12 +75,9 @@ export async function POST(req: NextRequest) {
   const data = parsed.data;
 
   try {
-    const host = await prisma.user.findFirst({
-      where: { id: data.hostUserId, isActive: true },
-      select: { id: true, fullName: true },
-    });
-    if (!host) {
-      return NextResponse.json({ message: "Selected host is not available." }, { status: 404 });
+    const assignedDeskUser = await resolveSelfServiceRoutingUser();
+    if (!assignedDeskUser) {
+      return NextResponse.json({ message: "No active account available for self-service routing." }, { status: 503 });
     }
 
     const preRegistration = await prisma.$transaction(async (tx) => {
@@ -77,8 +95,8 @@ export async function POST(req: NextRequest) {
           email: null,
           idType: data.idType,
           idNumber: data.idNumber,
-          hostUserId: host.id,
-          createdByUserId: host.id,
+          hostUserId: assignedDeskUser.id,
+          createdByUserId: assignedDeskUser.id,
           expectedAt: new Date(),
           purpose: data.purpose,
           personToVisit: null,

@@ -25,7 +25,7 @@ const walkInBody = z.object({
   company: z.string().trim().min(1, "Company is required.").max(120),
   purpose: z.string().trim().min(3, "Purpose of visit is required."),
   personToVisit: z.string().trim().min(2, "Who is being visited is required.").max(120),
-  visitFloor: z.enum(["GROUND_FLOOR", "FIRST_FLOOR", "SECOND_FLOOR"]),
+  personToVisitUserId: z.string().trim().min(1, "Who is being visited is required."),
   phone: optionalPhone,
   idType: requiredIdType,
   idNumber: requiredIdNumber,
@@ -35,13 +35,107 @@ const preRegisteredBody = z.object({
   type: z.literal("pre_registered"),
   preRegistrationId: z.string().trim().min(1, "Pre-registration is required."),
   personToVisit: z.string().trim().min(2, "Who is being visited is required.").max(120),
-  visitFloor: z.enum(["GROUND_FLOOR", "FIRST_FLOOR", "SECOND_FLOOR"]),
+  personToVisitUserId: z.string().trim().min(1, "Who is being visited is required."),
   phone: optionalPhone,
   idType: requiredIdType,
   idNumber: requiredIdNumber,
 });
 
 const createVisitBody = z.discriminatedUnion("type", [walkInBody, preRegisteredBody]);
+const consentExpiryDaysRaw = Number(process.env.CONSENT_EXPIRY_DAYS ?? "90");
+const CONSENT_EXPIRY_DAYS = Number.isFinite(consentExpiryDaysRaw) && consentExpiryDaysRaw > 0 ? consentExpiryDaysRaw : 90;
+
+const VISIT_SELECT = {
+  id: true,
+  visitorId: true,
+  status: true,
+  purpose: true,
+  personToVisit: true,
+  visitFloor: true,
+  expectedAt: true,
+  checkInAt: true,
+  visitorConsentAt: true,
+} as const;
+
+function createBlacklistedError(visitorId: string, blacklistReason?: string | null) {
+  return Object.assign(new Error("BLACKLISTED_VISITOR"), {
+    code: "BLACKLISTED",
+    visitorId,
+    blacklistReason: blacklistReason ?? null,
+  });
+}
+
+async function ensureVisitorForCheckIn(
+  tx: Prisma.TransactionClient,
+  payload: {
+    fullName: string;
+    company: string | null;
+    phone: string | null;
+    email: string | null;
+    idType: string;
+    idNumber: string;
+  },
+) {
+  const { fullName, company, phone, email, idType, idNumber } = payload;
+
+  if (idNumber) {
+    const existingVisitor = await tx.visitor.findUnique({
+      where: { idNumber },
+      select: { id: true, blacklisted: true, blacklistReason: true },
+    });
+    if (existingVisitor?.blacklisted) {
+      throw createBlacklistedError(existingVisitor.id, existingVisitor.blacklistReason);
+    }
+
+    return tx.visitor.upsert({
+      where: { idNumber },
+      update: {
+        fullName,
+        company,
+        ...(phone !== null ? { phone } : {}),
+        ...(email !== null ? { email } : {}),
+        idType,
+        idNumber,
+      },
+      create: {
+        fullName,
+        company,
+        phone,
+        email,
+        idType,
+        idNumber,
+      },
+      select: { id: true },
+    });
+  }
+
+  return tx.visitor.create({
+    data: {
+      fullName,
+      company,
+      phone,
+      email,
+      idType,
+      idNumber,
+    },
+    select: { id: true },
+  });
+}
+
+async function hasValidVisitorConsent(tx: Prisma.TransactionClient, visitorId: string) {
+  const latestConsentedVisit = await tx.visit.findFirst({
+    where: {
+      visitorId,
+      visitorConsentAt: { not: null },
+    },
+    orderBy: { visitorConsentAt: "desc" },
+    select: { visitorConsentAt: true },
+  });
+  const consentAt = latestConsentedVisit?.visitorConsentAt;
+  if (!consentAt) return false;
+  const expiresAt = new Date(consentAt.getTime() + CONSENT_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+  return expiresAt > new Date();
+}
 
 export async function POST(req: NextRequest) {
   const { ipAddress, userAgent } = getRequestMeta(req);
@@ -113,43 +207,51 @@ export async function POST(req: NextRequest) {
   const data = parsed.data;
 
   try {
+    const targetEmployee = await prisma.user.findFirst({
+      where: {
+        id: data.personToVisitUserId,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        fullName: true,
+        floor: true,
+      },
+    });
+    if (!targetEmployee) {
+      return NextResponse.json({ message: "Selected employee is not available." }, { status: 404 });
+    }
+    if (!targetEmployee.floor) {
+      return NextResponse.json({ message: "Selected employee has no assigned floor." }, { status: 400 });
+    }
+
     if (data.type === "walk_in") {
       const visit = await prisma.$transaction(async (tx) => {
-        const visitor = await tx.visitor.create({
-          data: {
-            fullName: data.fullName,
-            company: data.company,
-            phone: data.phone,
-            email: null,
-            idType: data.idType,
-            idNumber: data.idNumber,
-          },
-          select: { id: true },
+        const visitor = await ensureVisitorForCheckIn(tx, {
+          fullName: data.fullName,
+          company: data.company,
+          phone: data.phone,
+          email: null,
+          idType: data.idType,
+          idNumber: data.idNumber,
         });
+        const hasValidConsent = await hasValidVisitorConsent(tx, visitor.id);
 
         return tx.visit.create({
           data: {
             visitorId: visitor.id,
-            hostUserId: auth.user.id,
+            hostUserId: targetEmployee.id,
             createdByUserId: auth.user.id,
             status: "CHECKED_IN",
             purpose: data.purpose,
-            personToVisit: data.personToVisit,
-            visitFloor: data.visitFloor,
+            personToVisit: targetEmployee.fullName,
+            visitFloor: targetEmployee.floor,
             notes: null,
             expectedAt: null,
             checkInAt: new Date(),
+            visitorConsentAt: hasValidConsent ? new Date() : null,
           },
-          select: {
-            id: true,
-            visitorId: true,
-            status: true,
-            purpose: true,
-            personToVisit: true,
-            visitFloor: true,
-            expectedAt: true,
-            checkInAt: true,
-          },
+          select: VISIT_SELECT,
         });
       });
 
@@ -169,7 +271,7 @@ export async function POST(req: NextRequest) {
         ipAddress,
         userAgent,
       });
-      return NextResponse.json({ visit }, { status: 201 });
+      return NextResponse.json({ visit, consentRequired: visit.visitorConsentAt == null }, { status: 201 });
     }
 
     const visit = await prisma.$transaction(async (tx) => {
@@ -179,11 +281,16 @@ export async function POST(req: NextRequest) {
       if (!pre) {
         throw Object.assign(new Error("NOT_FOUND"), { code: "NOT_FOUND" });
       }
-      if (!pre.visitorConsentAt) {
-        throw Object.assign(new Error("CONSENT_REQUIRED"), { code: "CONSENT_REQUIRED" });
-      }
 
       if (pre.visitorId) {
+        const existingVisitor = await tx.visitor.findUnique({
+          where: { id: pre.visitorId },
+          select: { id: true, blacklisted: true, blacklistReason: true },
+        });
+        if (existingVisitor?.blacklisted) {
+          throw createBlacklistedError(existingVisitor.id, existingVisitor.blacklistReason);
+        }
+
         await tx.visitor.update({
           where: { id: pre.visitorId },
           data: {
@@ -193,29 +300,22 @@ export async function POST(req: NextRequest) {
           },
         });
 
+        const hasValidConsent = await hasValidVisitorConsent(tx, pre.visitorId);
         const v = await tx.visit.create({
           data: {
             visitorId: pre.visitorId,
-            hostUserId: auth.user.id,
+            hostUserId: targetEmployee.id,
             createdByUserId: auth.user.id,
             status: "CHECKED_IN",
             purpose: pre.purpose,
-            personToVisit: data.personToVisit,
-            visitFloor: data.visitFloor,
+            personToVisit: targetEmployee.fullName,
+            visitFloor: targetEmployee.floor,
             notes: pre.notes,
             expectedAt: pre.expectedAt,
             checkInAt: new Date(),
+            visitorConsentAt: hasValidConsent ? new Date() : null,
           },
-          select: {
-            id: true,
-            visitorId: true,
-            status: true,
-            purpose: true,
-            personToVisit: true,
-            visitFloor: true,
-            expectedAt: true,
-            checkInAt: true,
-          },
+          select: VISIT_SELECT,
         });
 
         await tx.preRegistration.update({
@@ -226,41 +326,31 @@ export async function POST(req: NextRequest) {
         return v;
       }
 
-      const visitor = await tx.visitor.create({
-        data: {
-          fullName: pre.fullName,
-          company: pre.company,
-          phone: data.phone ?? pre.phone,
-          email: pre.email,
-          idType: data.idType,
-          idNumber: data.idNumber,
-        },
-        select: { id: true },
+      const visitor = await ensureVisitorForCheckIn(tx, {
+        fullName: pre.fullName,
+        company: pre.company,
+        phone: data.phone ?? pre.phone,
+        email: pre.email,
+        idType: data.idType,
+        idNumber: data.idNumber,
       });
+      const hasValidConsent = await hasValidVisitorConsent(tx, visitor.id);
 
       const v = await tx.visit.create({
         data: {
           visitorId: visitor.id,
-          hostUserId: auth.user.id,
+          hostUserId: targetEmployee.id,
           createdByUserId: auth.user.id,
           status: "CHECKED_IN",
           purpose: pre.purpose,
-          personToVisit: data.personToVisit,
-          visitFloor: data.visitFloor,
+          personToVisit: targetEmployee.fullName,
+          visitFloor: targetEmployee.floor,
           notes: pre.notes,
           expectedAt: pre.expectedAt,
           checkInAt: new Date(),
+          visitorConsentAt: hasValidConsent ? new Date() : null,
         },
-        select: {
-          id: true,
-          visitorId: true,
-          status: true,
-          purpose: true,
-          personToVisit: true,
-          visitFloor: true,
-          expectedAt: true,
-          checkInAt: true,
-        },
+        select: VISIT_SELECT,
       });
 
       await tx.preRegistration.update({
@@ -288,7 +378,7 @@ export async function POST(req: NextRequest) {
       ipAddress,
       userAgent,
     });
-    return NextResponse.json({ visit }, { status: 201 });
+    return NextResponse.json({ visit, consentRequired: visit.visitorConsentAt == null }, { status: 201 });
   } catch (e) {
     console.error("[api/visits][POST] Failed to check in visitor", {
       message: e instanceof Error ? e.message : "Unknown error",
@@ -317,23 +407,29 @@ export async function POST(req: NextRequest) {
       });
       return NextResponse.json({ message: "Pre-registration not found or already checked in." }, { status: 404 });
     }
-    if (e && typeof e === "object" && "code" in e && (e as { code: string }).code === "CONSENT_REQUIRED") {
+    if (e && typeof e === "object" && "code" in e && (e as { code: string }).code === "BLACKLISTED") {
       await writeAuditLog({
         event: "VISIT_CHECK_IN",
         status: "FAILURE",
         actorUserId: auth.user.id,
         actorLoginId: auth.user.userLoginId,
-        message: "Consent is required before checking in pre-registration.",
+        targetUserId: "visitorId" in e && typeof e.visitorId === "string" ? e.visitorId : null,
+        message: "Blocked check-in attempt for blacklisted visitor.",
         metadata: {
           flow: data.type,
           ...(data.type === "pre_registered" ? { preRegistrationId: data.preRegistrationId } : {}),
+          reason:
+            "blacklistReason" in e && typeof e.blacklistReason === "string" ? e.blacklistReason : null,
         },
         ipAddress,
         userAgent,
       });
       return NextResponse.json(
-        { message: "Visitor consent is required before receptionist check-in." },
-        { status: 409 },
+        {
+          code: "BLACKLISTED",
+          message: "This guest is cyrrently blacklisted kindly contact security",
+        },
+        { status: 403 },
       );
     }
     if (e instanceof Prisma.PrismaClientInitializationError) {

@@ -10,6 +10,9 @@ type PreRegItem = {
   id: string;
   fullName: string;
   company: string | null;
+  phone: string | null;
+  idType: string | null;
+  idNumber: string | null;
   expectedAt: string;
   purpose: string | null;
   personToVisit: string | null;
@@ -22,10 +25,50 @@ type EmployeeOption = {
   id: string;
   fullName: string;
   email: string;
+  floor: "GROUND_FLOOR" | "FIRST_FLOOR" | "SECOND_FLOOR" | null;
 };
 
 const ID_TYPES = ["Passport", "Driving License", "National ID"] as const;
-const FLOOR_TYPES = ["GROUND_FLOOR", "FIRST_FLOOR", "SECOND_FLOOR"] as const;
+const BLACKLISTED_VISITOR_TOAST = "This guest is cyrrently blacklisted kindly contact security";
+
+/** Kenya mobile: +254 + up to 9 national digits (e.g. 7XXXXXXXX). */
+const KE_PHONE_LOCAL_MAX_DIGITS = 9;
+const NATIONAL_ID_MAX_DIGITS = 12;
+
+function digitsOnly(s: string): string {
+  return s.replace(/\D/g, "");
+}
+
+/** Local digits after +254 for display/editing (no leading 0). */
+function parseKeLocalFromStored(phone: string | null | undefined): string {
+  if (!phone?.trim()) return "";
+  let d = digitsOnly(phone);
+  if (d.startsWith("254")) d = d.slice(3);
+  if (d.startsWith("0")) d = d.slice(1);
+  return d.slice(0, KE_PHONE_LOCAL_MAX_DIGITS);
+}
+
+function formatKePhoneE164(localDigits: string): string | null {
+  const d = digitsOnly(localDigits).slice(0, KE_PHONE_LOCAL_MAX_DIGITS);
+  if (!d) return null;
+  return `+254${d}`;
+}
+
+function sanitizeIdNumberInput(value: string, idType: string): string {
+  if (idType === "National ID") {
+    return digitsOnly(value).slice(0, NATIONAL_ID_MAX_DIGITS);
+  }
+  return value;
+}
+
+function resolveCheckInErrorMessage(data: { message?: string; code?: string } | null): string {
+  const rawMessage = (data?.message || "").toLowerCase();
+  if (data?.code === "BLACKLISTED" || rawMessage.includes("blacklisted")) {
+    return BLACKLISTED_VISITOR_TOAST;
+  }
+  return data?.message || "Check-in failed.";
+}
+
 const PURPOSE_OPTIONS = [
   "Delivery",
   "Insurance claim follow-up",
@@ -39,8 +82,14 @@ const PURPOSE_OPTIONS = [
   "Other official business",
 ] as const;
 
+function isVisitorDirectoryPreReg(pre: PreRegItem | null | undefined) {
+  return (pre?.notes || "").toLowerCase().includes("visitor_directory_preregister");
+}
+
 export default function VisitsPage() {
   const router = useRouter();
+  const [checkingAccess, setCheckingAccess] = useState(true);
+  const [accessAllowed, setAccessAllowed] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [activeForm, setActiveForm] = useState<"pre_registered" | "walk_in" | "self_serviced">("pre_registered");
   const [preRegs, setPreRegs] = useState<PreRegItem[]>([]);
@@ -53,7 +102,6 @@ export default function VisitsPage() {
   const [walkPersonToVisit, setWalkPersonToVisit] = useState("");
   const [walkSelectedEmployee, setWalkSelectedEmployee] = useState<EmployeeOption | null>(null);
   const [walkEmployeeListOpen, setWalkEmployeeListOpen] = useState(false);
-  const [walkVisitFloor, setWalkVisitFloor] = useState("");
   const [walkPhone, setWalkPhone] = useState("");
   const [walkIdType, setWalkIdType] = useState("");
   const [walkIdNumber, setWalkIdNumber] = useState("");
@@ -64,14 +112,49 @@ export default function VisitsPage() {
   const [selectedPreId, setSelectedPreId] = useState("");
   const [prePhone, setPrePhone] = useState("");
   const [prePersonToVisit, setPrePersonToVisit] = useState("");
-  const [preVisitFloor, setPreVisitFloor] = useState("");
+  const [preSelectedEmployee, setPreSelectedEmployee] = useState<EmployeeOption | null>(null);
+  const [preEmployeeListOpen, setPreEmployeeListOpen] = useState(false);
   const [preIdType, setPreIdType] = useState("");
   const [preIdNumber, setPreIdNumber] = useState("");
   const [preSaving, setPreSaving] = useState(false);
 
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/me", { cache: "no-store" });
+        const data = await res.json().catch(() => null);
+        if (!alive) return;
+        const role = data?.user?.role;
+        if (res.ok && (role === "ADMIN" || role === "RECEPTIONIST")) {
+          setAccessAllowed(true);
+          return;
+        }
+        router.replace("/home");
+      } catch {
+        if (!alive) return;
+        router.replace("/home");
+      } finally {
+        if (alive) setCheckingAccess(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [router]);
+
   function showToast(type: "success" | "error", text: string) {
     setToast({ type, text });
     window.setTimeout(() => setToast(null), 4000);
+  }
+
+  function resolveEmployeeForVisit(rawInput: string, selected: EmployeeOption | null): EmployeeOption | null {
+    const normalizedQuery = rawInput.trim().toLowerCase();
+    const matchedEmployee = employeeOptions.find(
+      (employee) =>
+        employee.fullName.toLowerCase() === normalizedQuery || employee.email.toLowerCase() === normalizedQuery,
+    );
+    return selected ?? matchedEmployee ?? null;
   }
 
   const loadPreRegs = useCallback(async () => {
@@ -129,7 +212,8 @@ export default function VisitsPage() {
     setSelectedPreId("");
     setPrePhone("");
     setPrePersonToVisit("");
-    setPreVisitFloor("");
+    setPreSelectedEmployee(null);
+    setPreEmployeeListOpen(false);
     setPreIdType("");
     setPreIdNumber("");
   }, [activeForm]);
@@ -137,26 +221,83 @@ export default function VisitsPage() {
   useEffect(() => {
     if (!selectedPre) {
       setPrePersonToVisit("");
-      setPreVisitFloor("");
+      setPreSelectedEmployee(null);
+      setPreEmployeeListOpen(false);
+      setPrePhone("");
+      setPreIdType("");
+      setPreIdNumber("");
       return;
     }
-    setPrePersonToVisit(selectedPre.personToVisit ?? "");
-    setPreVisitFloor(selectedPre.visitFloor ?? "");
+    // For repeat preregistrations created from Visitors, host must be selected afresh at check-in.
+    setPrePersonToVisit(isVisitorDirectoryPreReg(selectedPre) ? "" : (selectedPre.personToVisit ?? ""));
+    setPreSelectedEmployee(null);
+    setPreEmployeeListOpen(false);
+    setPrePhone(parseKeLocalFromStored(selectedPre.phone));
+    setPreIdType(selectedPre.idType ?? "");
+    setPreIdNumber(selectedPre.idNumber ?? "");
   }, [selectedPre]);
+
+  async function runPreRegistrationCheckIn(args: {
+    preRegistrationId: string;
+    personToVisit: string;
+    personToVisitUserId: string;
+    phone: string | null;
+    idType: string;
+    idNumber: string;
+    selectedPreRecord?: PreRegItem | null;
+  }) {
+    const res = await fetch("/api/visits", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "pre_registered",
+        preRegistrationId: args.preRegistrationId,
+        personToVisit: args.personToVisit,
+        personToVisitUserId: args.personToVisitUserId,
+        phone: args.phone,
+        idType: args.idType,
+        idNumber: args.idNumber,
+      }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      showToast("error", resolveCheckInErrorMessage(data));
+      return false;
+    }
+    const vid = data?.visit?.id as string | undefined;
+    if (vid) {
+      const checkedInLabel = args.selectedPreRecord?.notes?.toLowerCase().includes("self-service")
+        ? "Self-serviced visitor"
+        : "Pre-registered visitor";
+      if (data?.consentRequired) {
+        showToast("success", `${checkedInLabel} checked in. Opening the consent QR page...`);
+        router.push(`/visits/consent-qr?visitId=${encodeURIComponent(vid)}`);
+      } else {
+        showToast("success", `${checkedInLabel} checked in. Consent still valid; QR skipped.`);
+      }
+    }
+    setSelectedPreId("");
+    setPrePhone("");
+    setPrePersonToVisit("");
+    setPreIdType("");
+    setPreIdNumber("");
+    await loadPreRegs();
+    return true;
+  }
+
 
   async function onWalkInSubmit(e: React.FormEvent) {
     e.preventDefault();
 
     const rawPersonToVisit = walkPersonToVisit.trim();
-    const normalizedQuery = rawPersonToVisit.toLowerCase();
-    const matchedEmployee = employeeOptions.find(
-      (employee) =>
-        employee.fullName.toLowerCase() === normalizedQuery || employee.email.toLowerCase() === normalizedQuery,
-    );
-    const resolvedPersonToVisit = walkSelectedEmployee?.fullName ?? matchedEmployee?.fullName ?? rawPersonToVisit;
+    const resolvedEmployee = resolveEmployeeForVisit(rawPersonToVisit, walkSelectedEmployee);
 
-    if (!walkFullName.trim() || !walkCompany.trim() || !walkPurpose.trim() || !resolvedPersonToVisit || !walkVisitFloor) {
-      showToast("error", "Full name, company, purpose, who is being visited, and floor are required.");
+    if (!walkFullName.trim() || !walkCompany.trim() || !walkPurpose.trim() || !resolvedEmployee) {
+      showToast("error", "Full name, company, purpose, and who is being visited are required.");
+      return;
+    }
+    if (!resolvedEmployee.floor) {
+      showToast("error", "Selected employee has no assigned floor.");
       return;
     }
     if (!walkIdType || !walkIdNumber.trim()) {
@@ -170,9 +311,9 @@ export default function VisitsPage() {
         fullName: walkFullName.trim(),
         company: walkCompany.trim(),
         purpose: walkPurpose.trim(),
-        personToVisit: resolvedPersonToVisit,
-        visitFloor: walkVisitFloor,
-        phone: walkPhone.trim() || null,
+        personToVisit: resolvedEmployee.fullName,
+        personToVisitUserId: resolvedEmployee.id,
+        phone: formatKePhoneE164(walkPhone),
         idType: walkIdType,
         idNumber: walkIdNumber.trim(),
       };
@@ -184,7 +325,7 @@ export default function VisitsPage() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        showToast("error", data?.message || "Check-in failed.");
+        showToast("error", resolveCheckInErrorMessage(data));
         return;
       }
       const vid = data?.visit?.id as string | undefined;
@@ -198,7 +339,6 @@ export default function VisitsPage() {
       setWalkPersonToVisit("");
       setWalkSelectedEmployee(null);
       setWalkEmployeeListOpen(false);
-      setWalkVisitFloor("");
       setWalkPhone("");
       setWalkIdType("");
       setWalkIdNumber("");
@@ -213,54 +353,36 @@ export default function VisitsPage() {
       showToast("error", "Select a pre-registered guest.");
       return;
     }
-    const resolvedPersonToVisit = prePersonToVisit.trim();
-    if (!resolvedPersonToVisit || !preVisitFloor) {
-      showToast("error", "Who is being visited and floor are required.");
+    const rawPersonToVisit = prePersonToVisit.trim();
+    const resolvedEmployee = resolveEmployeeForVisit(rawPersonToVisit, preSelectedEmployee);
+    if (!resolvedEmployee) {
+      showToast("error", "Please select who is being visited (required for check-in).");
       return;
     }
-    if (selectedPre && !selectedPre.visitorConsentAt) {
-      showToast("error", "Consent must be recorded before check-in.");
+    if (!resolvedEmployee.floor) {
+      showToast("error", "Selected employee has no assigned floor.");
       return;
     }
-    if (!preIdType || !preIdNumber.trim()) {
+    const lockedPersonalDetails = activeForm === "self_serviced" || isVisitorDirectoryPreReg(selectedPre);
+    const resolvedPhone = lockedPersonalDetails ? selectedPre?.phone ?? null : formatKePhoneE164(prePhone);
+    const resolvedIdType = lockedPersonalDetails ? selectedPre?.idType ?? "" : preIdType;
+    const resolvedIdNumber = lockedPersonalDetails ? selectedPre?.idNumber ?? "" : preIdNumber.trim();
+
+    if (!resolvedIdType || !resolvedIdNumber) {
       showToast("error", "Document type and document number are required.");
       return;
     }
     setPreSaving(true);
     try {
-      const res = await fetch("/api/visits", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "pre_registered",
-          preRegistrationId: selectedPreId,
-          personToVisit: resolvedPersonToVisit,
-          visitFloor: preVisitFloor,
-          phone: prePhone.trim() || null,
-          idType: preIdType,
-          idNumber: preIdNumber.trim(),
-        }),
+      await runPreRegistrationCheckIn({
+        preRegistrationId: selectedPreId,
+        personToVisit: resolvedEmployee.fullName,
+        personToVisitUserId: resolvedEmployee.id,
+        phone: resolvedPhone,
+        idType: resolvedIdType,
+        idNumber: resolvedIdNumber,
+        selectedPreRecord: selectedPre,
       });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        showToast("error", data?.message || "Check-in failed.");
-        return;
-      }
-      const vid = data?.visit?.id as string | undefined;
-      if (vid) {
-        const checkedInLabel = selectedPre?.notes?.toLowerCase().includes("self-service")
-          ? "Self-serviced visitor"
-          : "Pre-registered visitor";
-        showToast("success", `${checkedInLabel} checked in. Opening the consent QR page...`);
-        router.push(`/visits/consent-qr?visitId=${encodeURIComponent(vid)}`);
-      }
-      setSelectedPreId("");
-      setPrePhone("");
-      setPrePersonToVisit("");
-      setPreVisitFloor("");
-      setPreIdType("");
-      setPreIdNumber("");
-      await loadPreRegs();
     } finally {
       setPreSaving(false);
     }
@@ -289,6 +411,26 @@ export default function VisitsPage() {
       .filter((employee) => employee.fullName.toLowerCase().includes(q) || employee.email.toLowerCase().includes(q))
       .slice(0, 8);
   }, [employeeOptions, walkPersonToVisit, walkSelectedEmployee]);
+  const matchingPreEmployees = useMemo(() => {
+    if (preSelectedEmployee) return [];
+
+    const q = prePersonToVisit.trim().toLowerCase();
+    if (!q) return employeeOptions.slice(0, 8);
+
+    return employeeOptions
+      .filter((employee) => employee.fullName.toLowerCase().includes(q) || employee.email.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [employeeOptions, prePersonToVisit, preSelectedEmployee]);
+
+  if (checkingAccess) {
+    return (
+      <main className={styles.page} style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Preloader label="Checking access..." size="lg" />
+      </main>
+    );
+  }
+
+  if (!accessAllowed) return null;
 
   return (
     <main className={styles.page}>
@@ -310,8 +452,8 @@ export default function VisitsPage() {
         <section className={`${styles.card} ${styles.heroCard}`}>
           <h1 className={styles.title}>Visit operations</h1>
           <p className={styles.subtitle}>
-            Check in walk-ins and pre-registered visitors, collect missing details at the desk, and capture visitor data
-            consent instantly via QR scan.
+            Check in walk-ins, desk pre-registrations, and self-service entries. Check-in creates the visitor profile
+            shown under Visitors on the home page; use this screen to add ID details and the consent QR.
           </p>
           <div className={styles.quickStats}>
             <div className={styles.statPill}>
@@ -406,10 +548,12 @@ export default function VisitsPage() {
                             <i className="fa-solid fa-user" style={{ marginRight: 6, opacity: 0.75 }} aria-hidden />
                             {p.fullName}
                           </strong>
-                          <span>
-                            <i className="fa-regular fa-clock" style={{ marginRight: 4 }} aria-hidden />
-                            {new Date(p.expectedAt).toLocaleString()}
-                          </span>
+                          {activeForm === "pre_registered" ? (
+                            <span>
+                              <i className="fa-regular fa-clock" style={{ marginRight: 4 }} aria-hidden />
+                              {new Date(p.expectedAt).toLocaleString()}
+                            </span>
+                          ) : null}
                         </div>
                         <div className={styles.preRegMeta}>
                           <i className="fa-solid fa-building" style={{ marginRight: 4 }} aria-hidden />
@@ -432,18 +576,26 @@ export default function VisitsPage() {
               </h2>
               <p className={styles.hint}>
                 <i className="fa-solid fa-circle-info" style={{ marginRight: 6 }} aria-hidden />
-                Phone is optional. Document type and number are required.
+                {activeForm === "self_serviced"
+                  ? "Phone and document details were captured at self-service and will be used automatically. Completing check-in creates their visitor profile (Visitors on home)."
+                  : "Phone is optional (+254, up to 9 digits). Document type and number are required. National ID: numbers only. Check-in creates their visitor profile (Visitors on home)."}
               </p>
               {selectedPre ? (
                 <p className={styles.summary}>
                   <strong>{selectedPre.fullName}</strong>
                   {selectedPre.company ? ` · ${selectedPre.company}` : ""}
-                  <br />
-                  Expected: {new Date(selectedPre.expectedAt).toLocaleString()}
+                  {activeForm === "pre_registered" ? (
+                    <>
+                      <br />
+                      Expected: {new Date(selectedPre.expectedAt).toLocaleString()}
+                    </>
+                  ) : null}
                   <br />
                   Purpose: {selectedPre.purpose || "—"}
                   <br />
                   Visiting: {selectedPre.personToVisit || "—"} · Floor: {(selectedPre.visitFloor || "—").replace("_", " ")}
+                  <br />
+                  Document: {selectedPre.idType || "—"} · Number: {selectedPre.idNumber || "—"}
                 </p>
               ) : (
                 <p className={styles.emptyState}>Select a person from the list to continue.</p>
@@ -454,77 +606,146 @@ export default function VisitsPage() {
                     <i className="fa-solid fa-user-tie" aria-hidden />
                     Who is being visited
                   </label>
-                  <input
-                    id="pre-person"
-                    className={`${styles.input} ${styles.inputBlue}`}
-                    value={prePersonToVisit}
-                    onChange={(e) => setPrePersonToVisit(e.target.value)}
-                    placeholder="Enter employee/host name"
-                    disabled={!selectedPre}
-                  />
+                  <div className={styles.searchSelectWrap}>
+                    {preSelectedEmployee ? (
+                      <div className={styles.selectedEmployeeChip} aria-live="polite">
+                        <div className={styles.selectedEmployeeMeta}>
+                          <strong>{preSelectedEmployee.fullName}</strong>
+                          <small>{preSelectedEmployee.email}</small>
+                        </div>
+                        <button
+                          type="button"
+                          className={styles.clearChipButton}
+                          onClick={() => {
+                            setPreSelectedEmployee(null);
+                            setPrePersonToVisit("");
+                            setPreEmployeeListOpen(true);
+                          }}
+                          disabled={!selectedPre}
+                        >
+                          Change
+                        </button>
+                      </div>
+                    ) : (
+                      <input
+                        id="pre-person"
+                        className={`${styles.input} ${styles.inputBlue}`}
+                        value={prePersonToVisit}
+                        onChange={(e) => {
+                          setPrePersonToVisit(e.target.value);
+                          setPreSelectedEmployee(null);
+                          setPreEmployeeListOpen(true);
+                        }}
+                        onFocus={() => setPreEmployeeListOpen(true)}
+                        onBlur={() => {
+                          window.setTimeout(() => setPreEmployeeListOpen(false), 120);
+                        }}
+                        placeholder="Search employee by name or email"
+                        disabled={!selectedPre}
+                      />
+                    )}
+                    {preEmployeeListOpen && !preSelectedEmployee && selectedPre ? (
+                      <div className={styles.searchSelectList} role="listbox" aria-label="Employees">
+                        {loadingEmployees ? (
+                          <div className={styles.searchSelectHint}>Loading employees...</div>
+                        ) : matchingPreEmployees.length ? (
+                          matchingPreEmployees.map((employee) => (
+                            <button
+                              key={employee.id}
+                              type="button"
+                              className={styles.searchSelectItem}
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => {
+                                setPreSelectedEmployee(employee);
+                                setPrePersonToVisit("");
+                                setPreEmployeeListOpen(false);
+                              }}
+                            >
+                              <span>{employee.fullName}</span>
+                              <small>{employee.email}</small>
+                            </button>
+                          ))
+                        ) : (
+                          <div className={styles.searchSelectHint}>No matching employee found.</div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-                <div className={styles.field}>
-                  <label className={`${styles.label} ${styles.labelWithIcon} ${styles.labelWithIconOrange}`} htmlFor="pre-floor">
-                    <i className="fa-solid fa-building" aria-hidden />
-                    Floor
-                  </label>
-                  <select
-                    id="pre-floor"
-                    className={`${styles.select} ${styles.selectOrange}`}
-                    value={preVisitFloor}
-                    onChange={(e) => setPreVisitFloor(e.target.value)}
-                  >
-                    <option value="">Select floor</option>
-                    {FLOOR_TYPES.map((f) => (
-                      <option key={f} value={f}>
-                        {f.replace("_", " ")}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className={styles.field}>
-                  <label className={`${styles.label} ${styles.labelWithIcon}`} htmlFor="pre-phone">
-                    <i className="fa-solid fa-phone" aria-hidden />
-                    Phone (optional)
-                  </label>
-                  <input
-                    id="pre-phone"
-                    className={`${styles.input} ${styles.inputBlue}`}
-                    value={prePhone}
-                    onChange={(e) => setPrePhone(e.target.value)}
-                  />
-                </div>
-                <div className={styles.field}>
-                  <label className={`${styles.label} ${styles.labelWithIcon} ${styles.labelWithIconOrange}`} htmlFor="pre-idtype">
-                    <i className="fa-solid fa-passport" aria-hidden />
-                    Document type
-                  </label>
-                  <select
-                    id="pre-idtype"
-                    className={`${styles.select} ${styles.selectOrange}`}
-                    value={preIdType}
-                    onChange={(e) => setPreIdType(e.target.value)}
-                  >
-                    <option value="">Select type</option>
-                    {ID_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className={styles.field} style={{ gridColumn: "1 / -1" }}>
-                  <label className={`${styles.label} ${styles.labelWithIcon}`} htmlFor="pre-idnum">
-                    <i className="fa-solid fa-hashtag" aria-hidden />
-                    Document number
-                  </label>
-                  <input
-                    id="pre-idnum"
-                    className={`${styles.input} ${styles.inputBlue}`}
-                    value={preIdNumber}
-                    onChange={(e) => setPreIdNumber(e.target.value)}
-                  />
-                </div>
+                {activeForm === "pre_registered" && !isVisitorDirectoryPreReg(selectedPre) ? (
+                  <>
+                    <div className={styles.field}>
+                      <label className={`${styles.label} ${styles.labelWithIcon}`} htmlFor="pre-phone-local">
+                        <i className="fa-solid fa-phone" aria-hidden />
+                        Phone (optional)
+                      </label>
+                      <div className={`${styles.phoneInputRow} ${styles.phoneInputRowBlue}`}>
+                        <span className={styles.phonePrefix} aria-hidden>
+                          +254
+                        </span>
+                        <input
+                          id="pre-phone-local"
+                          className={styles.phoneInputLocal}
+                          value={prePhone}
+                          onChange={(e) =>
+                            setPrePhone(digitsOnly(e.target.value).slice(0, KE_PHONE_LOCAL_MAX_DIGITS))
+                          }
+                          inputMode="numeric"
+                          autoComplete="tel-national"
+                          placeholder="712345678"
+                          aria-label="Phone number without country code"
+                        />
+                      </div>
+                    </div>
+                    <div className={styles.field}>
+                      <label
+                        className={`${styles.label} ${styles.labelWithIcon} ${styles.labelWithIconOrange}`}
+                        htmlFor="pre-idtype"
+                      >
+                        <i className="fa-solid fa-passport" aria-hidden />
+                        Document type
+                      </label>
+                      <select
+                        id="pre-idtype"
+                        className={`${styles.select} ${styles.selectOrange}`}
+                        value={preIdType}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          setPreIdType(next);
+                          setPreIdNumber((prev) => sanitizeIdNumberInput(prev, next));
+                        }}
+                      >
+                        <option value="">Select type</option>
+                        {ID_TYPES.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className={styles.field} style={{ gridColumn: "1 / -1" }}>
+                      <label className={`${styles.label} ${styles.labelWithIcon}`} htmlFor="pre-idnum">
+                        <i className="fa-solid fa-hashtag" aria-hidden />
+                        Document number
+                      </label>
+                      <input
+                        id="pre-idnum"
+                        className={`${styles.input} ${styles.inputBlue}`}
+                        value={preIdNumber}
+                        onChange={(e) =>
+                          setPreIdNumber(sanitizeIdNumberInput(e.target.value, preIdType))
+                        }
+                        inputMode={preIdType === "National ID" ? "numeric" : "text"}
+                      />
+                    </div>
+                  </>
+                ) : null}
+                {activeForm === "pre_registered" && isVisitorDirectoryPreReg(selectedPre) ? (
+                  <p className={styles.hint} style={{ gridColumn: "1 / -1", marginTop: 0 }}>
+                    <i className="fa-solid fa-lock" style={{ marginRight: 6 }} aria-hidden />
+                    Personal details are locked from the visitor profile (document-number based pre-registration).
+                  </p>
+                ) : null}
                 <div className={styles.actions} style={{ gridColumn: "1 / -1" }}>
                   <button type="submit" className={styles.buttonPrimary} disabled={preSaving || !selectedPreId}>
                     {preSaving ? (
@@ -537,12 +758,6 @@ export default function VisitsPage() {
                     )}
                   </button>
                 </div>
-                {selectedPre && !selectedPre.visitorConsentAt ? (
-                  <p className={styles.hint} style={{ gridColumn: "1 / -1", marginTop: 0 }}>
-                    <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: 6 }} aria-hidden />
-                    Consent pending. Ask visitor to complete consent from the self-service desk before check-in.
-                  </p>
-                ) : null}
               </form>
             </div>
           </section>
@@ -554,7 +769,8 @@ export default function VisitsPage() {
             </h2>
             <p className={styles.hint}>
               <i className="fa-solid fa-circle-info" style={{ marginRight: 6 }} aria-hidden />
-              Document type and number are required. Phone is optional.
+              Document type and number are required. Phone is optional (+254, up to 9 digits). National ID: numbers only.
+              Check-in creates their visitor profile (Visitors on home).
             </p>
             <div className={styles.divider} />
             <form className={styles.grid} onSubmit={onWalkInSubmit}>
@@ -671,35 +887,27 @@ export default function VisitsPage() {
                 </div>
               </div>
               <div className={styles.field}>
-                <label className={`${styles.label} ${styles.labelWithIcon} ${styles.labelWithIconOrange}`} htmlFor="w-floor">
-                  <i className="fa-solid fa-building" aria-hidden />
-                  Floor
-                </label>
-                <select
-                  id="w-floor"
-                  className={`${styles.select} ${styles.selectOrange}`}
-                  value={walkVisitFloor}
-                  onChange={(e) => setWalkVisitFloor(e.target.value)}
-                >
-                  <option value="">Select floor</option>
-                  {FLOOR_TYPES.map((f) => (
-                    <option key={f} value={f}>
-                      {f.replace("_", " ")}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className={styles.field}>
-                <label className={`${styles.label} ${styles.labelWithIcon} ${styles.labelWithIconOrange}`} htmlFor="w-phone">
+                <label className={`${styles.label} ${styles.labelWithIcon} ${styles.labelWithIconOrange}`} htmlFor="w-phone-local">
                   <i className="fa-solid fa-phone" aria-hidden />
                   Phone (optional)
                 </label>
-                <input
-                  id="w-phone"
-                  className={`${styles.input} ${styles.inputOrange}`}
-                  value={walkPhone}
-                  onChange={(e) => setWalkPhone(e.target.value)}
-                />
+                <div className={`${styles.phoneInputRow} ${styles.phoneInputRowOrange}`}>
+                  <span className={styles.phonePrefix} aria-hidden>
+                    +254
+                  </span>
+                  <input
+                    id="w-phone-local"
+                    className={styles.phoneInputLocal}
+                    value={walkPhone}
+                    onChange={(e) =>
+                      setWalkPhone(digitsOnly(e.target.value).slice(0, KE_PHONE_LOCAL_MAX_DIGITS))
+                    }
+                    inputMode="numeric"
+                    autoComplete="tel-national"
+                    placeholder="712345678"
+                    aria-label="Phone number without country code"
+                  />
+                </div>
               </div>
               <div className={styles.field}>
                 <label className={`${styles.label} ${styles.labelWithIcon}`} htmlFor="w-idtype">
@@ -710,7 +918,11 @@ export default function VisitsPage() {
                   id="w-idtype"
                   className={`${styles.select} ${styles.selectBlue}`}
                   value={walkIdType}
-                  onChange={(e) => setWalkIdType(e.target.value)}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setWalkIdType(next);
+                    setWalkIdNumber((prev) => sanitizeIdNumberInput(prev, next));
+                  }}
                 >
                   <option value="">Select type</option>
                   {ID_TYPES.map((t) => (
@@ -729,7 +941,10 @@ export default function VisitsPage() {
                   id="w-idnum"
                   className={`${styles.input} ${styles.inputOrange}`}
                   value={walkIdNumber}
-                  onChange={(e) => setWalkIdNumber(e.target.value)}
+                  onChange={(e) =>
+                    setWalkIdNumber(sanitizeIdNumberInput(e.target.value, walkIdType))
+                  }
+                  inputMode={walkIdType === "National ID" ? "numeric" : "text"}
                 />
               </div>
               <div className={styles.actions} style={{ gridColumn: "1 / -1" }}>

@@ -6,6 +6,7 @@ Use this as a quick reference for app routes.
 
 - `/` - Visipass command center homepage
 - `/login` - Login page
+- `/visitor-consent` - Visitor data consent (QR: query `visitId` preferred, or legacy `preRegistrationId`)
 
 ## Protected
 
@@ -13,7 +14,8 @@ Use this as a quick reference for app routes.
 - `/users/new` - Admin: Create user
 - `/visitors` - Visitors list
 - `/visitors/[id]` - Visitor detail
-- `/visits` - Visit operations
+- `/visits` - Visit operations (check-in, optional ID fields, consent QR)
+- `/preregistration` - Pre-registration create form (minimal fields)
 - `/pre-registrations` - Pre-registration flows
 - `/reports` - Reports and exports
 
