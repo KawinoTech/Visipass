@@ -57,6 +57,12 @@ const VISIT_SELECT = {
   visitorConsentAt: true,
 } as const;
 
+function atStartOfDay(value: Date) {
+  const copy = new Date(value);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
 function createBlacklistedError(visitorId: string, blacklistReason?: string | null) {
   return Object.assign(new Error("BLACKLISTED_VISITOR"), {
     code: "BLACKLISTED",
@@ -281,6 +287,13 @@ export async function POST(req: NextRequest) {
       if (!pre) {
         throw Object.assign(new Error("NOT_FOUND"), { code: "NOT_FOUND" });
       }
+      if (pre.expectedAt) {
+        const todayStart = atStartOfDay(new Date());
+        const expectedDayStart = atStartOfDay(pre.expectedAt);
+        if (todayStart < expectedDayStart) {
+          throw Object.assign(new Error("TOO_EARLY"), { code: "TOO_EARLY", expectedAt: pre.expectedAt });
+        }
+      }
 
       if (pre.visitorId) {
         const existingVisitor = await tx.visitor.findUnique({
@@ -430,6 +443,26 @@ export async function POST(req: NextRequest) {
           message: "This guest is cyrrently blacklisted kindly contact security",
         },
         { status: 403 },
+      );
+    }
+    if (e && typeof e === "object" && "code" in e && (e as { code: string }).code === "TOO_EARLY") {
+      await writeAuditLog({
+        event: "VISIT_CHECK_IN",
+        status: "FAILURE",
+        actorUserId: auth.user.id,
+        actorLoginId: auth.user.userLoginId,
+        message: "Attempted pre-registration check-in before expected date.",
+        metadata: {
+          flow: data.type,
+          ...(data.type === "pre_registered" ? { preRegistrationId: data.preRegistrationId } : {}),
+          expectedAt: "expectedAt" in e && e.expectedAt instanceof Date ? e.expectedAt.toISOString() : null,
+        },
+        ipAddress,
+        userAgent,
+      });
+      return NextResponse.json(
+        { message: "Visitor can only be checked in on or after the expected date." },
+        { status: 409 },
       );
     }
     if (e instanceof Prisma.PrismaClientInitializationError) {

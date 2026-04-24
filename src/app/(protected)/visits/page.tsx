@@ -66,6 +66,9 @@ function resolveCheckInErrorMessage(data: { message?: string; code?: string } | 
   if (data?.code === "BLACKLISTED" || rawMessage.includes("blacklisted")) {
     return BLACKLISTED_VISITOR_TOAST;
   }
+  if (data?.code === "TOO_EARLY" || rawMessage.includes("on or after the expected date")) {
+    return "This visitor is scheduled for a future date. Check-in is allowed from the expected date.";
+  }
   return data?.message || "Check-in failed.";
 }
 

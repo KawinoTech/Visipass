@@ -69,7 +69,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   });
   if (activeVisit) {
     return NextResponse.json(
-      { message: "This guest is currently checked in. Check out first before pre-registering." },
+      {
+        code: "ACTIVE_VISIT",
+        message: "This guest is currently checked in. Check out first before pre-registering.",
+      },
       { status: 409 },
     );
   }

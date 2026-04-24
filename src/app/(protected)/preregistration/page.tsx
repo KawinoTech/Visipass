@@ -13,6 +13,13 @@ type EmployeeOption = {
   floor: "GROUND_FLOOR" | "FIRST_FLOOR" | "SECOND_FLOOR" | null;
 };
 
+type PreviousVisitorItem = {
+  id: string;
+  fullName: string;
+  company: string | null;
+  lastRegisteredAt: string;
+};
+
 export default function PreRegistrationCreatePage() {
   const router = useRouter();
   const PURPOSE_OPTIONS = [
@@ -37,6 +44,13 @@ export default function PreRegistrationCreatePage() {
   const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [employeeListOpen, setEmployeeListOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadingPreviousVisitors, setLoadingPreviousVisitors] = useState(false);
+  const [searchingPreviousVisitors, setSearchingPreviousVisitors] = useState(false);
+  const [previousVisitors, setPreviousVisitors] = useState<PreviousVisitorItem[]>([]);
+  const [visitorSearchTerm, setVisitorSearchTerm] = useState("");
+  const [preregisterModalVisitor, setPreregisterModalVisitor] = useState<PreviousVisitorItem | null>(null);
+  const [preregisterExpectedAt, setPreregisterExpectedAt] = useState("");
+  const [submittingPreregisterVisitorId, setSubmittingPreregisterVisitorId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [accessAllowed, setAccessAllowed] = useState(false);
@@ -95,6 +109,31 @@ export default function PreRegistrationCreatePage() {
       mounted = false;
     };
   }, []);
+
+  async function loadPreviousVisitors(searchText = "") {
+    if (!accessAllowed) return;
+    const trimmed = searchText.trim();
+    const query = trimmed ? `?q=${encodeURIComponent(trimmed)}` : "";
+    setLoadingPreviousVisitors(true);
+    try {
+      const res = await fetch(`/api/pre-registrations/my-visitors${query}`, { cache: "no-store" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        showMessage("error", data?.message || "Failed to load your previously registered visitors.");
+        return;
+      }
+      setPreviousVisitors((data?.items ?? []) as PreviousVisitorItem[]);
+    } catch {
+      showMessage("error", "Network error while loading returning visitors.");
+    } finally {
+      setLoadingPreviousVisitors(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!accessAllowed) return;
+    void loadPreviousVisitors();
+  }, [accessAllowed]);
 
   const matchingEmployees = useMemo(() => {
     if (selectedEmployee) return [];
@@ -172,6 +211,54 @@ export default function PreRegistrationCreatePage() {
       showMessage("error", "Network error while submitting pre-registration.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function searchPreviousVisitors(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSearchingPreviousVisitors(true);
+    try {
+      await loadPreviousVisitors(visitorSearchTerm);
+    } finally {
+      setSearchingPreviousVisitors(false);
+    }
+  }
+
+  async function submitPreregisterFromExistingVisitor() {
+    if (!preregisterModalVisitor) return;
+    const expected = new Date(preregisterExpectedAt);
+    if (!preregisterExpectedAt.trim() || Number.isNaN(expected.getTime())) {
+      showMessage("error", "Please provide a valid expected date/time.");
+      return;
+    }
+
+    setSubmittingPreregisterVisitorId(preregisterModalVisitor.id);
+    try {
+      const res = await fetch(`/api/visitors/${encodeURIComponent(preregisterModalVisitor.id)}/preregister`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expectedAt: expected.toISOString() }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        const rawMessage = String(data?.message ?? "").toLowerCase();
+        if (data?.code === "ACTIVE_VISIT" || rawMessage.includes("currently checked in")) {
+          showMessage("error", "This visitor is still checked in. Check them out first before pre-registering again.");
+          return;
+        }
+        showMessage("error", data?.message || "Failed to pre-register visitor.");
+        return;
+      }
+      showMessage(
+        "success",
+        "Pre-registration created from visitor history. Continue in Visit operations when they arrive.",
+      );
+      setPreregisterModalVisitor(null);
+      await loadPreviousVisitors(visitorSearchTerm);
+    } catch {
+      showMessage("error", "Network error while pre-registering visitor.");
+    } finally {
+      setSubmittingPreregisterVisitorId(null);
     }
   }
 
@@ -373,7 +460,104 @@ export default function PreRegistrationCreatePage() {
             </div>
           </form>
         </section>
+
+        <section className={styles.card}>
+          <h2 className={styles.sectionLabel}>
+            <i className="fa-solid fa-user-check" style={{ marginRight: 8 }} aria-hidden />
+            Returning visitors you previously registered
+          </h2>
+          <p className={styles.hint}>
+            Search by visitor name and pre-register in one click without re-entering full details.
+          </p>
+          <div className={styles.divider} />
+
+          <form className={styles.returningSearchRow} onSubmit={searchPreviousVisitors}>
+            <input
+              className={`${styles.input} ${styles.inputBlue}`}
+              value={visitorSearchTerm}
+              onChange={(e) => setVisitorSearchTerm(e.target.value)}
+              placeholder="Search visitor by name"
+            />
+            <button type="submit" className={styles.buttonSecondary} disabled={searchingPreviousVisitors || loadingPreviousVisitors}>
+              {searchingPreviousVisitors ? <Preloader label="Searching..." size="sm" /> : "Search"}
+            </button>
+          </form>
+
+          <div className={styles.returningList}>
+            {loadingPreviousVisitors ? (
+              <div className={styles.searchSelectHint}>Loading visitors...</div>
+            ) : previousVisitors.length === 0 ? (
+              <div className={styles.searchSelectHint}>No matching previously registered visitors found.</div>
+            ) : (
+              previousVisitors.map((visitor) => (
+                <article key={visitor.id} className={styles.returningItem}>
+                  <div className={styles.returningMeta}>
+                    <strong>{visitor.fullName}</strong>
+                    <small>
+                      {visitor.company || "No company"} • Last pre-registered: {" "}
+                      {new Date(visitor.lastRegisteredAt).toLocaleString()}
+                    </small>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.buttonPrimary}
+                    onClick={() => {
+                      setPreregisterModalVisitor(visitor);
+                      setPreregisterExpectedAt(new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16));
+                    }}
+                    disabled={submittingPreregisterVisitorId === visitor.id}
+                  >
+                    Preregister
+                  </button>
+                </article>
+              ))
+            )}
+          </div>
+        </section>
       </section>
+
+      {preregisterModalVisitor ? (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modalCard}>
+            <h3 className={styles.modalTitle}>Preregister visitor</h3>
+            <p className={styles.modalSubtitle}>
+              Set expected date/time for <strong>{preregisterModalVisitor.fullName}</strong>.
+            </p>
+            <label className={styles.label} htmlFor="preregister-expected-at">
+              Expected date/time
+            </label>
+            <input
+              id="preregister-expected-at"
+              type="datetime-local"
+              className={`${styles.input} ${styles.inputBlue}`}
+              value={preregisterExpectedAt}
+              onChange={(e) => setPreregisterExpectedAt(e.target.value)}
+            />
+            <div className={styles.modalActions}>
+              <button
+                type="button"
+                className={styles.buttonSecondary}
+                onClick={() => setPreregisterModalVisitor(null)}
+                disabled={submittingPreregisterVisitorId === preregisterModalVisitor.id}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={styles.buttonPrimary}
+                onClick={() => void submitPreregisterFromExistingVisitor()}
+                disabled={submittingPreregisterVisitorId === preregisterModalVisitor.id}
+              >
+                {submittingPreregisterVisitorId === preregisterModalVisitor.id ? (
+                  <Preloader label="Saving..." size="sm" />
+                ) : (
+                  "Save"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

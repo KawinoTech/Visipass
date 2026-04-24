@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LoadingOverlay, Preloader } from "@/components/ui/Preloader";
 import styles from "./user-create.module.css";
@@ -30,6 +31,10 @@ type UserRow = {
   updatedAt: string;
 };
 type Toast = { id: number; type: "success" | "error"; text: string };
+type ConfirmAction =
+  | { kind: "save_edit"; userId: string }
+  | { kind: "toggle_status"; userId: string; nextIsActive: boolean; userName: string }
+  | { kind: "delete_user"; userId: string; userName: string };
 
 const LOCATIONS: { value: UserLocation; label: string }[] = [
   { value: "HEAD_OFFICE", label: "Head Office" },
@@ -77,6 +82,7 @@ export default function UserManagementPage() {
   const [savingEdit, setSavingEdit] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
 
   function pushToast(type: Toast["type"], text: string) {
     const id = Date.now() + Math.floor(Math.random() * 1000);
@@ -166,6 +172,17 @@ export default function UserManagementPage() {
     return filtered;
   }, [users, search, filterRole, filterStatus, sortBy, sortDir]);
 
+  const founderAdminId = useMemo(() => {
+    const admins = users.filter((u) => u.role === "ADMIN");
+    if (admins.length === 0) return null;
+    const earliest = [...admins].sort((a, b) => {
+      const createdDiff = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      if (createdDiff !== 0) return createdDiff;
+      return a.id.localeCompare(b.id);
+    })[0];
+    return earliest?.id ?? null;
+  }, [users]);
+
   async function onCreate(ev: FormEvent) {
     ev.preventDefault();
     if (!fullName.trim() || !userLoginId.trim() || !emailLocal.trim()) {
@@ -249,12 +266,11 @@ export default function UserManagementPage() {
   }
 
   async function setUserActive(id: string, isActive: boolean) {
+    if (founderAdminId && id === founderAdminId) {
+      pushToast("error", "Founder admin cannot be disabled.");
+      return;
+    }
     const actionLabel = isActive ? "Enable" : "Disable";
-    const confirmLabel = isActive
-      ? "Are you sure you want to enable this user?"
-      : "Are you sure you want to disable this user? The account will not be able to log in.";
-    if (!window.confirm(confirmLabel)) return;
-
     setTogglingUserId(id);
     try {
       const res = await fetch(`/api/users/${id}`, {
@@ -284,7 +300,10 @@ export default function UserManagementPage() {
   }
 
   async function deleteUser(id: string) {
-    if (!window.confirm("Are you sure you want to delete this user? This cannot be undone.")) return;
+    if (founderAdminId && id === founderAdminId) {
+      pushToast("error", "Founder admin cannot be deleted.");
+      return;
+    }
     setDeleting(true);
     try {
       const res = await fetch(`/api/users/${id}`, { method: "DELETE" });
@@ -309,6 +328,40 @@ export default function UserManagementPage() {
     }
   }
 
+  async function executeConfirmAction() {
+    if (!confirmAction) return;
+
+    if (confirmAction.kind === "save_edit") {
+      if (!editing || editing.id !== confirmAction.userId) {
+        setConfirmAction(null);
+        return;
+      }
+      setConfirmAction(null);
+      await updateUser({
+        id: editing.id,
+        fullName: editing.fullName.trim(),
+        role: editing.role,
+        isActive: editing.isActive,
+        location: editing.location,
+        floor: editing.location === "HEAD_OFFICE" ? editing.floor : null,
+      });
+      return;
+    }
+
+    if (confirmAction.kind === "toggle_status") {
+      const { userId, nextIsActive } = confirmAction;
+      setConfirmAction(null);
+      await setUserActive(userId, nextIsActive);
+      return;
+    }
+
+    if (confirmAction.kind === "delete_user") {
+      const { userId } = confirmAction;
+      setConfirmAction(null);
+      await deleteUser(userId);
+    }
+  }
+
   if (booting) {
     return (
       <main className={styles.page}>
@@ -324,14 +377,13 @@ export default function UserManagementPage() {
     <main className={styles.page}>
       {saving || savingEdit || deleting || togglingUserId ? <LoadingOverlay label="Saving changes..." /> : null}
       <div className={styles.toastStack}>{toasts.map((t) => <div key={t.id} className={`${styles.toast} ${t.type === "success" ? styles.toastSuccess : styles.toastError}`}>{t.text}</div>)}</div>
-      <section className={styles.moduleHeader}>
-        <button className={styles.buttonSecondary} type="button" onClick={() => router.push("/home")}>
-          <span className={styles.iconLabel}>
-            <svg viewBox="0 0 24 24" className={styles.icon} aria-hidden="true"><path d="m15 18-6-6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Back to Home
-          </span>
-        </button>
-      </section>
+      <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+        <Link href="/home" className={styles.breadcrumbLink}>
+          <i className="fa-solid fa-arrow-left" aria-hidden />
+          Back to Home
+        </Link>
+        <span className={styles.breadcrumbCurrent}>User Management</span>
+      </nav>
       <section className={styles.moduleHeader}>
         <h1 className={styles.title}>User Management</h1>
         <p className={styles.subtitle}>Create, view, and update staff accounts.</p>
@@ -391,46 +443,69 @@ export default function UserManagementPage() {
                     <td>{u.isActive ? "Active" : "Disabled"}</td>
                     <td>
                       <div className={styles.tableActions}>
-                        <button className={styles.buttonSecondary} onClick={() => setEditing(u)} disabled={deleting}>
-                          <span className={styles.iconLabel}>
-                            <svg viewBox="0 0 24 24" className={styles.icon} aria-hidden="true"><path d="M4 20h4l10-10-4-4L4 16v4Zm12.7-12.3 1.6-1.6a1 1 0 0 1 1.4 0l1.2 1.2a1 1 0 0 1 0 1.4l-1.6 1.6-2.6-2.6Z" fill="currentColor"/></svg>
-                            Edit
-                          </span>
-                        </button>
-                        <button
-                          className={u.isActive ? styles.buttonWarn : styles.buttonSuccess}
-                          onClick={() => void setUserActive(u.id, !u.isActive)}
-                          disabled={deleting || savingEdit || togglingUserId === u.id}
-                        >
-                          <span className={styles.iconLabel}>
-                            {u.isActive ? (
-                              <svg viewBox="0 0 24 24" className={styles.icon} aria-hidden="true">
-                                <path
-                                  d="M12 7a5 5 0 1 0 0 10a5 5 0 0 0 0-10Zm-9 5a9 9 0 1 1 18 0a9 9 0 0 1-18 0Z"
-                                  fill="currentColor"
-                                />
-                                <path d="M7 7l10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                              </svg>
-                            ) : (
-                              <svg viewBox="0 0 24 24" className={styles.icon} aria-hidden="true">
-                                <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm4.2 8.2-4.6 4.6a1 1 0 0 1-1.4 0l-2.1-2.1a1 1 0 1 1 1.4-1.4l1.4 1.4 3.9-3.9a1 1 0 1 1 1.4 1.4Z" fill="currentColor" />
-                              </svg>
-                            )}
-                            {togglingUserId === u.id ? (
-                              "Updating..."
-                            ) : u.isActive ? (
-                              "Disable"
-                            ) : (
-                              "Enable"
-                            )}
-                          </span>
-                        </button>
-                        <button className={styles.buttonDanger} onClick={() => void deleteUser(u.id)} disabled={deleting}>
-                          <span className={styles.iconLabel}>
-                            <svg viewBox="0 0 24 24" className={styles.icon} aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-1 6h2v11H8V9Zm6 0h2v11h-2V9Z" fill="currentColor"/></svg>
-                            Delete
-                          </span>
-                        </button>
+                        {u.id !== founderAdminId ? (
+                          <button className={styles.buttonSecondary} onClick={() => setEditing(u)} disabled={deleting}>
+                            <span className={styles.iconLabel}>
+                              <svg viewBox="0 0 24 24" className={styles.icon} aria-hidden="true"><path d="M4 20h4l10-10-4-4L4 16v4Zm12.7-12.3 1.6-1.6a1 1 0 0 1 1.4 0l1.2 1.2a1 1 0 0 1 0 1.4l-1.6 1.6-2.6-2.6Z" fill="currentColor"/></svg>
+                              Edit
+                            </span>
+                          </button>
+                        ) : null}
+                        {u.id !== founderAdminId ? (
+                          <>
+                            <button
+                              className={u.isActive ? styles.buttonWarn : styles.buttonSuccess}
+                              onClick={() =>
+                                setConfirmAction({
+                                  kind: "toggle_status",
+                                  userId: u.id,
+                                  nextIsActive: !u.isActive,
+                                  userName: u.fullName,
+                                })
+                              }
+                              disabled={deleting || savingEdit || togglingUserId === u.id}
+                            >
+                              <span className={styles.iconLabel}>
+                                {u.isActive ? (
+                                  <svg viewBox="0 0 24 24" className={styles.icon} aria-hidden="true">
+                                    <path
+                                      d="M12 7a5 5 0 1 0 0 10a5 5 0 0 0 0-10Zm-9 5a9 9 0 1 1 18 0a9 9 0 0 1-18 0Z"
+                                      fill="currentColor"
+                                    />
+                                    <path d="M7 7l10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                                  </svg>
+                                ) : (
+                                  <svg viewBox="0 0 24 24" className={styles.icon} aria-hidden="true">
+                                    <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2Zm4.2 8.2-4.6 4.6a1 1 0 0 1-1.4 0l-2.1-2.1a1 1 0 1 1 1.4-1.4l1.4 1.4 3.9-3.9a1 1 0 1 1 1.4 1.4Z" fill="currentColor" />
+                                  </svg>
+                                )}
+                                {togglingUserId === u.id ? (
+                                  "Updating..."
+                                ) : u.isActive ? (
+                                  "Disable"
+                                ) : (
+                                  "Enable"
+                                )}
+                              </span>
+                            </button>
+                            <button
+                              className={styles.buttonDanger}
+                              onClick={() =>
+                                setConfirmAction({
+                                  kind: "delete_user",
+                                  userId: u.id,
+                                  userName: u.fullName,
+                                })
+                              }
+                              disabled={deleting}
+                            >
+                              <span className={styles.iconLabel}>
+                                <svg viewBox="0 0 24 24" className={styles.icon} aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-1 6h2v11H8V9Zm6 0h2v11h-2V9Z" fill="currentColor"/></svg>
+                                Delete
+                              </span>
+                            </button>
+                          </>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -489,16 +564,7 @@ export default function UserManagementPage() {
               <button
                 className={styles.buttonPrimary}
                 disabled={savingEdit || deleting}
-                onClick={() =>
-                  void updateUser({
-                    id: editing.id,
-                    fullName: editing.fullName.trim(),
-                    role: editing.role,
-                    isActive: editing.isActive,
-                    location: editing.location,
-                    floor: editing.location === "HEAD_OFFICE" ? editing.floor : null,
-                  })
-                }
+                onClick={() => setConfirmAction({ kind: "save_edit", userId: editing.id })}
               >
                 {savingEdit ? <Preloader label="Saving..." size="sm" /> : <span className={styles.iconLabel}>
                   <svg viewBox="0 0 24 24" className={styles.icon} aria-hidden="true"><path d="M17 3H5a2 2 0 0 0-2 2v14l4-4h10a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Z" fill="currentColor"/></svg>
@@ -509,6 +575,48 @@ export default function UserManagementPage() {
           </div>
         </div>
       )}
+      {confirmAction ? (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modalCard}>
+            <h3 className={styles.modalTitle}>
+              {confirmAction.kind === "save_edit"
+                ? "Confirm user changes"
+                : confirmAction.kind === "toggle_status"
+                  ? confirmAction.nextIsActive
+                    ? "Confirm enable user"
+                    : "Confirm disable user"
+                  : "Confirm delete user"}
+            </h3>
+            <p className={styles.modalSubtitle}>
+              {confirmAction.kind === "save_edit"
+                ? "Apply these edits to this user account?"
+                : confirmAction.kind === "toggle_status"
+                  ? confirmAction.nextIsActive
+                    ? `Enable ${confirmAction.userName}'s account so they can sign in again?`
+                    : `Disable ${confirmAction.userName}'s account? They will not be able to sign in.`
+                  : `Delete ${confirmAction.userName}'s account? This action cannot be undone.`}
+            </p>
+            <div className={styles.modalActions}>
+              <button
+                className={styles.buttonSecondary}
+                type="button"
+                onClick={() => setConfirmAction(null)}
+                disabled={savingEdit || deleting || !!togglingUserId}
+              >
+                Cancel
+              </button>
+              <button
+                className={confirmAction.kind === "delete_user" ? styles.buttonDanger : styles.buttonPrimary}
+                type="button"
+                onClick={() => void executeConfirmAction()}
+                disabled={savingEdit || deleting || !!togglingUserId}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

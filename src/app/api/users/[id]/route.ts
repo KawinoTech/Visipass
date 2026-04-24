@@ -33,6 +33,14 @@ const updateUserSchema = z
     }
   });
 
+async function getFounderAdmin() {
+  return prisma.user.findFirst({
+    where: { role: "ADMIN" },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { id: true, role: true, isActive: true, userLoginId: true },
+  });
+}
+
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   const auth = await requireAdmin(req);
   if (!auth.ok) {
@@ -135,6 +143,21 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
   }
 
   try {
+    const founderAdmin = await getFounderAdmin();
+    if (founderAdmin && founderAdmin.id === id) {
+      await writeAuditLog({
+        event: "USER_UPDATE",
+        status: "FAILURE",
+        actorUserId: auth.userId,
+        targetUserId: id,
+        targetLoginId: founderAdmin.userLoginId,
+        message: "Founder admin account cannot be edited.",
+        ipAddress,
+        userAgent,
+      });
+      return NextResponse.json({ message: "Founder admin account cannot be edited." }, { status: 403 });
+    }
+
     const updated = await prisma.user.update({
       where: { id },
       data: {
@@ -234,6 +257,21 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
   const { id } = await context.params;
 
   try {
+    const founderAdmin = await getFounderAdmin();
+    if (founderAdmin && founderAdmin.id === id) {
+      await writeAuditLog({
+        event: "USER_DELETE",
+        status: "FAILURE",
+        actorUserId: auth.userId,
+        targetUserId: id,
+        targetLoginId: founderAdmin.userLoginId,
+        message: "Founder admin cannot be deleted.",
+        ipAddress,
+        userAgent,
+      });
+      return NextResponse.json({ message: "Founder admin cannot be deleted." }, { status: 403 });
+    }
+
     await prisma.user.delete({
       where: { id },
     });

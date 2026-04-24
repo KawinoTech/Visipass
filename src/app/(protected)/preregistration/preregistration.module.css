@@ -203,6 +203,46 @@
   justify-content: flex-end;
 }
 
+.returningSearchRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.returningList {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.returningItem {
+  border: 1px solid var(--vp-card-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--brand-primary) 6%, var(--vp-card-bg));
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.returningMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.returningMeta strong {
+  color: var(--vp-title);
+  font-size: 14px;
+}
+
+.returningMeta small {
+  color: var(--vp-subtitle);
+  font-size: 12px;
+}
+
 .buttonPrimary {
   display: inline-flex;
   align-items: center;
@@ -219,6 +259,24 @@
 
 .buttonPrimary:disabled {
   opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.buttonSecondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 800;
+  cursor: pointer;
+  border: 1px solid var(--vp-secondary-btn-border);
+  background: var(--vp-secondary-btn-bg);
+  color: var(--vp-secondary-btn-text);
+}
+
+.buttonSecondary:disabled {
+  opacity: 0.7;
   cursor: not-allowed;
 }
 
@@ -341,4 +399,45 @@
 
 .clearChipButton:hover {
   background: color-mix(in srgb, var(--brand-primary) 10%, var(--vp-card-bg));
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.48);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 250;
+}
+
+.modalCard {
+  width: min(100%, 460px);
+  border: 1px solid var(--vp-card-border);
+  border-radius: 16px;
+  background: var(--vp-card-bg);
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.modalTitle {
+  margin: 0;
+  color: var(--vp-title);
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.modalSubtitle {
+  margin: 0;
+  color: var(--vp-subtitle);
+  font-size: 14px;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
 }

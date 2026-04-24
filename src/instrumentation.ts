@@ -8,5 +8,7 @@ export async function register() {
   }
 
   const { ensureDefaultAdmin } = await import("@/lib/bootstrap/ensure-default-admin");
+  const { startPreRegistrationAutoCancelScheduler } = await import("@/lib/scheduler/pre-registration-auto-cancel");
   await ensureDefaultAdmin();
+  startPreRegistrationAutoCancelScheduler();
 }
