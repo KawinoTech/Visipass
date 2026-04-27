@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Preloader } from "@/components/ui/Preloader";
 import styles from "./audit-logs.module.css";
@@ -69,11 +70,13 @@ export default function AuditLogsPage() {
   return (
     <main className={styles.page}>
       <section className={styles.shell}>
-        <div className={styles.row}>
-          <button className={styles.button} onClick={() => router.push("/home")} type="button">
-            ← Back to Home
-          </button>
-        </div>
+        <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+          <Link href="/home" className={styles.breadcrumbLink}>
+            <i className="fa-solid fa-arrow-left" aria-hidden />
+            Back to Home
+          </Link>
+          <span className={styles.breadcrumbCurrent}>Audit logs</span>
+        </nav>
 
         <section>
           <h1 className={styles.title}>Audit Logs</h1>

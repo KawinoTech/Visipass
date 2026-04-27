@@ -237,10 +237,6 @@ export default function HomePage() {
             <p className={styles.statLabel}>📝 Pre-registrations</p>
             <p className={styles.statValue}>{stats ? stats.preRegistrations : "—"}</p>
           </article>
-          <article className={styles.stat}>
-            <p className={styles.statLabel}>🚨 Alerts</p>
-            <p className={styles.statValue}>2</p>
-          </article>
         </section>
 
         {canManageCheckouts ? (
@@ -271,7 +267,7 @@ export default function HomePage() {
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 860 }}>
                   <thead>
-                    <tr style={{ background: "color-mix(in srgb, var(--brand-primary) 8%, white)" }}>
+                    <tr className={styles.checkedInHeadRow}>
                       <th style={tableThStyle}>Visitor</th>
                       <th style={tableThStyle}>Employee to be visited</th>
                       <th style={tableThStyle}>Floor</th>
@@ -343,8 +339,8 @@ function formatFloorLabel(floor: "GROUND_FLOOR" | "FIRST_FLOOR" | "SECOND_FLOOR"
 const tableThStyle: CSSProperties = {
   textAlign: "left",
   padding: "10px 12px",
-  fontSize: 13,
-  fontWeight: 800,
+  fontSize: 14,
+  fontWeight: 700,
   color: "var(--vp-title)",
   borderBottom: "1px solid var(--vp-card-border)",
 };

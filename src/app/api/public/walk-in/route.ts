@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db/prisma";
+import { getRequestMeta, writeAuditLog } from "@/lib/logging/audit";
 
 const walkInSchema = z.object({
   fullName: z.string().trim().min(2, "Full name is required."),
-  company: z.string().trim().min(1, "Company is required.").max(120),
+  company: z.string().trim().max(120).optional().nullable().transform((s) => (s && s.length > 0 ? s : null)),
   purpose: z.string().trim().min(3, "Purpose of visit is required."),
   phone: z.string().trim().max(30).optional().nullable(),
   idType: z.string().trim().min(1, "Document type is required.").max(40),
@@ -56,16 +57,32 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const { ipAddress, userAgent } = getRequestMeta(req);
   let body: unknown;
   try {
     body = await req.json();
   } catch {
+    await writeAuditLog({
+      event: "PUBLIC_WALK_IN_PREREGISTER",
+      status: "FAILURE",
+      message: "Invalid JSON body.",
+      ipAddress,
+      userAgent,
+    });
     return NextResponse.json({ message: "Invalid JSON body." }, { status: 400 });
   }
 
   const parsed = walkInSchema.safeParse(body);
   if (!parsed.success) {
     const flat = parsed.error.flatten();
+    await writeAuditLog({
+      event: "PUBLIC_WALK_IN_PREREGISTER",
+      status: "FAILURE",
+      message: "Validation failed.",
+      metadata: { fieldErrors: flat.fieldErrors, formErrors: flat.formErrors },
+      ipAddress,
+      userAgent,
+    });
     return NextResponse.json(
       { message: "Validation failed.", fieldErrors: flat.fieldErrors, formErrors: flat.formErrors },
       { status: 400 },
@@ -77,6 +94,13 @@ export async function POST(req: NextRequest) {
   try {
     const assignedDeskUser = await resolveSelfServiceRoutingUser();
     if (!assignedDeskUser) {
+      await writeAuditLog({
+        event: "PUBLIC_WALK_IN_PREREGISTER",
+        status: "FAILURE",
+        message: "No active account available for self-service routing.",
+        ipAddress,
+        userAgent,
+      });
       return NextResponse.json({ message: "No active account available for self-service routing." }, { status: 503 });
     }
 
@@ -107,14 +131,46 @@ export async function POST(req: NextRequest) {
       });
     });
 
+    await writeAuditLog({
+      event: "PUBLIC_WALK_IN_PREREGISTER",
+      status: "SUCCESS",
+      targetUserId: preRegistration.id,
+      message: "Self-service pre-registration captured.",
+      metadata: { preRegistrationId: preRegistration.id, status: preRegistration.status },
+      ipAddress,
+      userAgent,
+    });
     return NextResponse.json({ preRegistration }, { status: 201 });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientInitializationError) {
+      await writeAuditLog({
+        event: "PUBLIC_WALK_IN_PREREGISTER",
+        status: "FAILURE",
+        message: "Database unavailable while capturing self-service pre-registration.",
+        ipAddress,
+        userAgent,
+      });
       return NextResponse.json({ message: "Database unavailable. Please try again shortly." }, { status: 503 });
     }
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      await writeAuditLog({
+        event: "PUBLIC_WALK_IN_PREREGISTER",
+        status: "FAILURE",
+        message: "Duplicate document number already exists.",
+        metadata: { code: e.code },
+        ipAddress,
+        userAgent,
+      });
       return NextResponse.json({ message: "Duplicate document number already exists." }, { status: 409 });
     }
+    await writeAuditLog({
+      event: "PUBLIC_WALK_IN_PREREGISTER",
+      status: "FAILURE",
+      message: "Failed to capture self-service pre-registration.",
+      metadata: { error: e instanceof Error ? e.message : "Unknown error" },
+      ipAddress,
+      userAgent,
+    });
     return NextResponse.json({ message: "Failed to capture self-service pre-registration." }, { status: 500 });
   }
 }

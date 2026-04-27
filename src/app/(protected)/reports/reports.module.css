@@ -14,6 +14,32 @@
   gap: 14px;
 }
 
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.breadcrumbLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--brand-primary);
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.breadcrumbLink:hover {
+  text-decoration: underline;
+}
+
+.breadcrumbCurrent {
+  font-size: 13px;
+  color: var(--vp-label-hint);
+}
+
 .card {
   border: 1px solid var(--vp-card-border);
   border-radius: 16px;

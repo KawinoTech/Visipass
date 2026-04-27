@@ -1,114 +1,191 @@
-# Visipass Module Documentation
+# Visipass Module and Function Documentation
 
-## 1) Authentication Module
+This document lists the current application modules and all exported functions/endpoints in `src`.
 
-### Purpose
-Handles sign-in, sign-out, and current-session user resolution.
+## 1) App Shell and Layout Modules
 
-### Routes
-- `POST /api/auth/login`
-- `POST /api/auth/logout`
-- `GET /api/auth/me`
+- `src/app/layout.tsx`
+  - `RootLayout({ children })`: Root HTML layout wrapper.
+- `src/app/loading.tsx`
+  - `AppLoading()`: Global loading UI.
+- `src/app/page.tsx`
+  - `RootPage()`: Root route entry page.
+- `src/app/(protected)/layout.tsx`
+  - `ProtectedLayout({ children })`: Wrapper for protected pages.
+- `src/instrumentation.ts`
+  - `register()`: Startup instrumentation registration.
 
-### Behavior
-- Login accepts `userId` (`userLoginId`) + password.
-- Passwords are verified against `passwordHash` using `bcrypt`.
-- JWT is stored in `access_token` cookie (`HttpOnly`).
-- Disabled accounts cannot log in and are rejected from active sessions.
+## 2) UI Components Modules
 
----
+- `src/components/header/AppHeader.tsx`
+  - `AppHeader()`: Main app header/navigation bar.
+- `src/components/ui/Preloader.tsx`
+  - `Preloader(props)`: Reusable loader component.
+  - `LoadingOverlay({ label })`: Blocking overlay loader.
+- `src/components/auth/IdleLogoutGuard.tsx`
+  - `IdleLogoutGuard()`: Idle session timeout guard.
 
-## 2) Authorization Module
+## 3) Theme and Client Store Modules
 
-### Purpose
-Enforces admin-only access for protected management APIs.
+- `src/lib/theme/theme-store.tsx`
+  - `ThemeProvider({ children })`: Theme context provider.
+  - `useThemeStore()`: Theme state hook.
 
-### Core helper
+## 4) Authentication and Authorization Modules
+
+- `src/lib/auth/require-user.ts`
+  - `requireUser(request)`: Validates authenticated user session.
 - `src/lib/auth/require-admin.ts`
+  - `requireAdmin(request)`: Validates admin-only access.
+- `src/app/api/auth/login/route.ts`
+  - `POST(req)`: Login endpoint.
+- `src/app/api/auth/logout/route.ts`
+  - `POST(req)`: Logout endpoint.
+- `src/app/api/auth/me/route.ts`
+  - `GET(req)`: Current-session user endpoint.
 
-### Behavior
-- Verifies token.
-- Loads DB user by token subject.
-- Rejects missing/invalid/disabled users.
-- Requires both token role and DB role to be `ADMIN`.
+## 5) Logging and Database Modules
 
----
+- `src/lib/logging/audit.ts`
+  - `getRequestMeta(req)`: Extracts request IP and user agent.
+  - `writeAuditLog(input)`: Writes audit events to file/DB.
+- `src/lib/db/prisma.ts`
+  - `prisma`: Prisma client singleton.
 
-## 3) Home Module (`/home`)
+## 6) Validation and Bootstrap Modules
 
-### Purpose
-Main command center for navigation into system functions.
+- `src/lib/validation/create-user.ts`
+  - `USER_ROLES`: Allowed user role constants.
+  - `USER_LOCATIONS`: Allowed location constants.
+  - `USER_FLOORS`: Allowed floor constants.
+  - `MUA_EMAIL_DOMAIN`: Required email domain.
+  - `createUserRequestSchema`: User-create request validator.
+- `src/lib/validation/index.ts`
+  - Central validation exports.
+- `src/lib/bootstrap/ensure-default-admin.ts`
+  - `ensureDefaultAdmin()`: Seeds/ensures default admin account.
+- `src/lib/scheduler/pre-registration-auto-cancel.ts`
+  - `startPreRegistrationAutoCancelScheduler()`: Starts auto-cancel scheduler.
 
-### Features
-- Quick stats cards.
-- Function cards for user management, visitors, visits, dashboard, reports.
-- Admin-gated entry to user management:
-  - Admin -> route to `/users/new`
-  - Non-admin -> toast: `Unauthorized, please contact admin`
+## 7) Protected Page Modules
 
----
+- `src/app/home/page.tsx`
+  - `HomePage()`: Command center/home dashboard page.
+- `src/app/(protected)/dashboard/page.tsx`
+  - `DashboardPage()`: Building/floor live occupancy page.
+- `src/app/(protected)/visits/page.tsx`
+  - `VisitsPage()`: Visit operations page (check-in workflows).
+- `src/app/(protected)/visits/consent-qr/page.tsx`
+  - `ConsentQrPage()`: QR consent workflow page.
+- `src/app/(protected)/visitors/page.tsx`
+  - `VisitorsPage()`: Visitor directory listing page.
+- `src/app/(protected)/visitors/VisitorsTable.tsx`
+  - `VisitorsTable({ visitors })`: Interactive visitors table component.
+- `src/app/(protected)/visitors/[id]/page.tsx`
+  - `VisitorDetailPage()`: Visitor profile detail page.
+- `src/app/(protected)/preregistration/page.tsx`
+  - `PreRegistrationCreatePage()`: Create pre-registration page.
+- `src/app/(protected)/pre-registrations/page.tsx`
+  - `PreRegistrationsPage()`: Pre-registrations list page.
+- `src/app/(protected)/reports/page.tsx`
+  - `ReportsPage()`: Reports and export page.
+- `src/app/(protected)/audit-logs/page.tsx`
+  - `AuditLogsPage()`: Audit log viewer page.
+- `src/app/(protected)/users/new/page.tsx`
+  - `UserManagementPage()`: User management page.
 
-## 4) User Management Module (`/users/new`)
+## 8) Public Page Modules
 
-### Purpose
-Admin workspace for user lifecycle operations.
+- `src/app/(public)/login/page.tsx`
+  - `LoginPage()`: Login page.
+- `src/app/(public)/self-service/page.tsx`
+  - `SelfServicePage()`: Self-service visitor pre-registration page.
+- `src/app/(public)/visitor-consent/page.tsx`
+  - `VisitorConsentPage()`: Public consent capture page.
+- `src/app/(public)/qr-generator/page.tsx`
+  - `QrGeneratorPage()`: Public QR generator page.
 
-### Features
-- **Overview tab**
-  - User list retrieval (`GET /api/users`)
-  - Filtering:
-    - Search by full name, user ID, email
-    - Role filter
-    - Status filter (active/disabled)
-  - Sorting:
-    - Full name, user ID, role, created date
-    - Asc/desc direction toggle
-  - Edit user modal (role, status, location, floor, name, delete)
-- **Create tab**
-  - Create user (`POST /api/users`)
-  - Domain-locked email composition (`@mua.co.ke`)
-  - Head Office floor logic
-  - Request-in-flight button locking and saving state
-- **Breadcrumb**
-  - `Back to Home`
+## 9) API Modules: User Management
 
-### API routes
-- `GET /api/users` (admin-only)
-- `POST /api/users` (admin-only)
-- `GET /api/users/:id` (admin-only)
-- `PATCH /api/users/:id` (admin-only)
-- `DELETE /api/users/:id` (admin-only)
+- `src/app/api/users/route.ts`
+  - `GET(req)`: List users.
+  - `POST(req)`: Create user.
+- `src/app/api/users/[id]/route.ts`
+  - `GET(req, context)`: Get user by id.
+  - `PATCH(req, context)`: Update user.
+  - `DELETE(req, context)`: Delete user.
 
----
+## 10) API Modules: Visits and Visitors
 
-## 5) UI/UX Standards Implemented
+- `src/app/api/visits/route.ts`
+  - `POST(req)`: Create/check-in visit (walk-in and pre-registered flows).
+- `src/app/api/visits/[id]/route.ts`
+  - `GET(req, context)`: Get visit details.
+- `src/app/api/visits/[id]/check-out/route.ts`
+  - `POST(req, context)`: Check out active visit.
+- `src/app/api/visitors/[id]/check-in/route.ts`
+  - `POST(req, context)`: Re-check-in existing visitor from directory.
+- `src/app/api/visitors/[id]/preregister/route.ts`
+  - `POST(req, context)`: Create preregistration from visitor record.
+- `src/app/api/visitors/[id]/blacklist/route.ts`
+  - `POST(req, context)`: Blacklist visitor.
+- `src/app/api/visitors/[id]/unblacklist/route.ts`
+  - `POST(req, context)`: Remove visitor blacklist flag.
 
-### Preloader system
-- Reusable loader component:
-  - `src/components/ui/Preloader.tsx`
-  - `src/components/ui/preloader.module.css`
-- Global route loading:
-  - `src/app/loading.tsx`
-- Client-action loading overlays and inline loaders for long-running requests.
+## 11) API Modules: Pre-registrations
 
-### Responsiveness
-- User management uses responsive grid/form/table wrappers.
-- Home module uses breakpoint-based card layout (`1 -> 2 -> 3` columns).
-- Horizontal overflow is constrained globally.
+- `src/app/api/pre-registrations/route.ts`
+  - `GET(req)`: List/search pre-registrations.
+  - `POST(req)`: Create pre-registration.
+- `src/app/api/pre-registrations/my-visitors/route.ts`
+  - `GET(req)`: Employee-scoped visitor list.
 
-### Toast feedback
-- Success and error toasts are shown for create, update, auth gate failures, and fetch failures.
+## 12) API Modules: Dashboard, Reports, Audit
 
----
+- `src/app/api/dashboard/summary/route.ts`
+  - `GET(req)`: Dashboard summary stats.
+- `src/app/api/dashboard/active-visits/route.ts`
+  - `GET(req)`: Active visits feed.
+- `src/app/api/reports/summary/route.ts`
+  - `GET(req)`: Report summary metrics.
+- `src/app/api/reports/visits.csv/route.ts`
+  - `GET(req)`: Visit CSV export.
+- `src/app/api/reports/visitors.csv/route.ts`
+  - `GET(req)`: Visitors CSV export.
+- `src/app/api/audit-logs/route.ts`
+  - `GET(req)`: Audit log query endpoint.
 
-## 6) Runtime Error Handling
+## 13) API Modules: Public APIs
 
-### Current handling
-- Database initialization failures return `503` where applicable.
-- Validation failures return structured `400` payloads.
-- Unauthorized and forbidden access return `401/403`.
+- `src/app/api/public/walk-in/route.ts`
+  - `GET()`: Public hosts list for self-service.
+  - `POST(req)`: Public walk-in pre-registration capture.
+- `src/app/api/public/visits/[id]/route.ts`
+  - `GET(_req, ctx)`: Public visit detail for consent screens.
+- `src/app/api/public/visits/[id]/consent/route.ts`
+  - `POST(req, ctx)`: Record consent for visit.
+- `src/app/api/public/pre-registrations/[id]/route.ts`
+  - `GET(_req, ctx)`: Public pre-registration detail.
+- `src/app/api/public/pre-registrations/[id]/consent/route.ts`
+  - `POST(req, ctx)`: Record consent for pre-registration.
 
-### Notes for next iteration
-- Add shared response helpers to reduce duplicated error branches.
-- Add unified toast utility (shared hook/component) for all pages.
-- Add middleware-level account status redirect for page navigation guards.
+## 14) API Modules: Utilities
+
+- `src/app/api/employees/route.ts`
+  - `GET(req)`: Employee lookup endpoint.
+- `src/app/api/qr-code/route.ts`
+  - `POST(req)`: Generate QR code data URL from text.
+- `src/app/api/theme/me/route.ts`
+  - `GET()`: Fetch current theme preference.
+- `src/app/api/theme/update/route.ts`
+  - `POST(req)`: Update theme preference (currently placeholder behavior).
+
+## 15) Test Modules
+
+- `src/app/api/auth/login/route.test.ts`
+- `src/app/api/users/route.test.ts`
+- `src/app/api/users/[id]/route.test.ts`
+- `src/lib/auth/require-admin.test.ts`
+- `src/lib/validation/create-user.test.ts`
+
+These modules validate authentication, authorization, user API behaviors, and schema validation logic.

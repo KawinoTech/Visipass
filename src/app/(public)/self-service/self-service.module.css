@@ -315,6 +315,89 @@
   cursor: pointer;
 }
 
+.secondaryButton {
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 12px 14px;
+  min-height: 52px;
+  font-weight: 700;
+  font-size: 15px;
+  color: #0f172a;
+  background: #f8fafc;
+  cursor: pointer;
+}
+
+.secondaryButton:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.returningVisitorSection {
+  grid-column: 1 / -1;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  background: #f8fafc;
+}
+
+.returningTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.returningHint {
+  margin: 0;
+  font-size: 13px;
+  color: #475569;
+}
+
+.returningSearchRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.searchEmpty {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+}
+
+.searchResults {
+  display: grid;
+  gap: 8px;
+}
+
+.resultRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #dbe3ef;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px 12px;
+}
+
+.resultMeta {
+  display: grid;
+  gap: 2px;
+}
+
+.resultMeta strong {
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.resultMeta small {
+  font-size: 12px;
+  color: #475569;
+}
+
 .button:hover {
   background: var(--brand-primary-dark);
 }
@@ -487,6 +570,14 @@
   .button {
     font-size: 17px;
     min-height: 52px;
+  }
+
+  .returningSearchRow {
+    grid-template-columns: 1fr;
+  }
+
+  .resultRow {
+    grid-template-columns: 1fr;
   }
 }
 

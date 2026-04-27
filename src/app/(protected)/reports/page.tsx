@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Preloader } from "@/components/ui/Preloader";
 import styles from "./reports.module.css";
@@ -97,15 +98,19 @@ export default function ReportsPage() {
   return (
     <main className={styles.page}>
       <section className={styles.shell}>
+        <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+          <Link href="/home" className={styles.breadcrumbLink}>
+            <i className="fa-solid fa-arrow-left" aria-hidden />
+            Back to Home
+          </Link>
+          <span className={styles.breadcrumbCurrent}>Reports and exports</span>
+        </nav>
         <section className={`${styles.card} ${styles.hero}`}>
           <h1 className={styles.title}>Reports & Export</h1>
           <p className={styles.subtitle}>
             Visual reports for visitor activity, visit timing patterns, and security signals. Download raw data for compliance and operational analysis.
           </p>
           <div className={styles.row} style={{ marginTop: 10 }}>
-            <button type="button" className={styles.button} onClick={() => router.push("/home")}>
-              ← Back to Home
-            </button>
             <a className={styles.buttonPrimary} href={`/api/reports/visits.csv?${queryString}`}>
               Download Visits CSV
             </a>

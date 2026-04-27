@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { prisma } from "@/lib/db/prisma";
+import styles from "./dashboard.module.css";
 
 const FLOOR_ORDER = ["SECOND_FLOOR", "FIRST_FLOOR", "GROUND_FLOOR"] as const;
 const MAX_VISIBLE_AVATARS_PER_FLOOR = 12;
@@ -11,6 +12,7 @@ const GROUND_FLOOR_ZONES = [
   "Business Development, General Claims and Underwriting/Reinsurance",
 ] as const;
 const FIRST_FLOOR_ZONES = ["ICT", "Boardroom (Mara)", "Reception", "Health and Finance"] as const;
+const SECOND_FLOOR_ZONES = ["Audit and Actuarial", "Reception", "Executive Wing"] as const;
 
 export default async function DashboardPage() {
   const activeVisits = await prisma.visit.findMany({
@@ -47,9 +49,13 @@ export default async function DashboardPage() {
       }}
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <Link href="/home" style={{ color: "var(--brand-primary)", fontWeight: 800, fontSize: 13, textDecoration: "none" }}>
-          ← Back to Home
-        </Link>
+        <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+          <Link href="/home" className={styles.breadcrumbLink}>
+            <i className="fa-solid fa-arrow-left" aria-hidden />
+            Back to Home
+          </Link>
+          <span className={styles.breadcrumbCurrent}>Dashboard</span>
+        </nav>
         <p style={{ margin: 0, fontSize: 13, color: "var(--vp-subtitle)", fontWeight: 700 }}>
           Active checked-in visitors: {activeVisits.length}
         </p>
@@ -88,6 +94,8 @@ export default async function DashboardPage() {
                 ? { zones: GROUND_FLOOR_ZONES, template: "1.2fr 1fr 1fr 1.6fr", receptionIndex: 1 }
                 : floorKey === "FIRST_FLOOR"
                   ? { zones: FIRST_FLOOR_ZONES, template: "0.7fr 1.2fr 1fr 1.7fr", receptionIndex: 2 }
+                  : floorKey === "SECOND_FLOOR"
+                    ? { zones: SECOND_FLOOR_ZONES, template: "1fr 1.1fr 1fr", receptionIndex: 1 }
                   : null;
             return (
               <div

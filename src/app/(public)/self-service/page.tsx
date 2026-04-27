@@ -55,6 +55,28 @@ function getIdNumberValidationError(idType: string, idNumber: string): string | 
   return null;
 }
 
+type ExistingVisitor = {
+  id: string;
+  fullName: string;
+  company: string | null;
+  idNumber: string | null;
+  phone: string | null;
+  blacklisted: boolean;
+};
+
+function maskLastThreeDigits(value: string | null): string {
+  if (!value) return "—";
+  let hiddenDigits = 0;
+  const chars = value.split("");
+  for (let i = chars.length - 1; i >= 0 && hiddenDigits < 3; i -= 1) {
+    if (/\d/.test(chars[i])) {
+      chars[i] = "*";
+      hiddenDigits += 1;
+    }
+  }
+  return chars.join("");
+}
+
 export default function SelfServicePage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
@@ -76,6 +98,11 @@ export default function SelfServicePage() {
   const [idType, setIdType] = useState("");
   const [idNumber, setIdNumber] = useState("");
   const [idNumberTouched, setIdNumberTouched] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchingVisitors, setSearchingVisitors] = useState(false);
+  const [searchResults, setSearchResults] = useState<ExistingVisitor[]>([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [recheckingVisitorId, setRecheckingVisitorId] = useState<string | null>(null);
   const idNumberValidationError = useMemo(
     () => (idNumberTouched ? getIdNumberValidationError(idType, idNumber) : null),
     [idType, idNumber, idNumberTouched]
@@ -196,7 +223,6 @@ export default function SelfServicePage() {
     const validationErrors: string[] = [];
 
     if (!trimmedFullName) validationErrors.push("full name");
-    if (!trimmedCompany) validationErrors.push("company");
     if (!trimmedPurpose) validationErrors.push("purpose");
     if (!idType) validationErrors.push("document type");
     if (!trimmedIdNumber) validationErrors.push("document number");
@@ -265,6 +291,85 @@ export default function SelfServicePage() {
       setError("Network error while submitting your details.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function searchExistingVisitors(query: string) {
+    const q = query.trim();
+    setError(null);
+    setSearchingVisitors(true);
+    try {
+      const res = await fetch(`/api/public/visitors/search?q=${encodeURIComponent(q)}`, { cache: "no-store" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(data?.message || "Could not search previous visitors.");
+        setSearchResults([]);
+        return;
+      }
+      setSearchResults((data?.items ?? []) as ExistingVisitor[]);
+    } catch {
+      setError("Network error while searching previous visitors.");
+      setSearchResults([]);
+    } finally {
+      setSearchingVisitors(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    const handle = window.setTimeout(() => {
+      void searchExistingVisitors(searchTerm);
+    }, 150);
+    return () => window.clearTimeout(handle);
+  }, [searchTerm, searchOpen]);
+
+  async function checkInExistingVisitor(visitor: ExistingVisitor) {
+    if (recheckingVisitorId) return;
+    setError(null);
+    setOkMessage(null);
+    setRecheckingVisitorId(visitor.id);
+    try {
+      const res = await fetch("/api/public/visitors/recheck-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visitorId: visitor.id }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        if (data?.code === "BLACKLISTED") {
+          setError(
+            locale === "sw"
+              ? data?.messageSw || "Hatuwezi kukusajili kwa sasa, tafadhali pata msaada kutoka dawati la mapokezi."
+              : data?.message || "Unable to check you in, please seek assistance from our Reception Desk.",
+          );
+          return;
+        }
+        setError(data?.message || (locale === "sw" ? "Imeshindikana kukusajili." : "Failed to check you in."));
+        return;
+      }
+
+      const preRegistrationIdValue = data?.preRegistration?.id as string | undefined;
+      if (!preRegistrationIdValue) {
+        setError(locale === "sw" ? "Imeshindikana kuanzisha mchakato wa mapokezi." : "Failed to start reception flow.");
+        return;
+      }
+
+      setPreRegistrationId(preRegistrationIdValue);
+      if (data?.consentRequired) {
+        router.push(`/visitor-consent?preRegistrationId=${encodeURIComponent(preRegistrationIdValue)}`);
+        return;
+      }
+
+      setOkMessage(
+        locale === "sw"
+          ? "Umesajiliwa. Tafadhali endelea hadi mapokezi kwa mwongozo zaidi."
+          : "Check-in request submitted. Please proceed to reception for further guidance.",
+      );
+      setStep("welcome");
+    } catch {
+      setError(locale === "sw" ? "Hitilafu ya mtandao wakati wa usajili." : "Network error while checking you in.");
+    } finally {
+      setRecheckingVisitorId(null);
     }
   }
 
@@ -371,6 +476,73 @@ export default function SelfServicePage() {
 
           {step === "form" ? (
             <form className={styles.form} onSubmit={onSubmit}>
+              <section className={styles.returningVisitorSection}>
+                <h3 className={styles.returningTitle}>
+                  {locale === "sw" ? "Mgeni aliyewahi kuingia?" : "Returning visitor?"}
+                </h3>
+                <p className={styles.returningHint}>
+                  {locale === "sw"
+                    ? "Tafuta kwa namba ya kitambulisho au jina (si nyeti kwa herufi kubwa/ndogo), kisha bofya Check in."
+                    : "Search by ID number or name (case-insensitive), then click Check in."}
+                </p>
+                <div className={styles.returningSearchRow}>
+                  <input
+                    className={styles.input}
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setSearchOpen(true);
+                    }}
+                    onFocus={() => {
+                      setSearchOpen(true);
+                      void searchExistingVisitors(searchTerm);
+                    }}
+                    placeholder={locale === "sw" ? "Mfano: 12345678 au Jane" : "Example: 12345678 or Jane"}
+                  />
+                  <button
+                    type="button"
+                    className={styles.secondaryButton}
+                    onClick={() => {
+                      setSearchOpen(true);
+                      void searchExistingVisitors(searchTerm);
+                    }}
+                    disabled={searchingVisitors}
+                  >
+                    {searchingVisitors ? (locale === "sw" ? "Inatafuta..." : "Searching...") : locale === "sw" ? "Tafuta" : "Search"}
+                  </button>
+                </div>
+                {searchOpen ? (
+                  <div className={styles.searchResults}>
+                    {searchResults.length === 0 && !searchingVisitors ? (
+                      <p className={styles.searchEmpty}>
+                        {locale === "sw"
+                          ? "Hakuna rekodi inayolingana. Tafadhali jaza fomu hapa chini."
+                          : "No matching records found. Please complete the form below."}
+                      </p>
+                    ) : null}
+                    {searchResults.map((visitor) => (
+                      <div key={visitor.id} className={styles.resultRow}>
+                        <div className={styles.resultMeta}>
+                          <strong>{visitor.fullName}</strong>
+                          <small>
+                            {locale === "sw" ? "Kitambulisho" : "ID"}: {maskLastThreeDigits(visitor.idNumber)} · {locale === "sw" ? "Simu" : "Phone"}:{" "}
+                            {maskLastThreeDigits(visitor.phone)}
+                          </small>
+                        </div>
+                        <button
+                          type="button"
+                          className={styles.secondaryButton}
+                          onClick={() => void checkInExistingVisitor(visitor)}
+                          disabled={recheckingVisitorId === visitor.id}
+                        >
+                          {recheckingVisitorId === visitor.id ? (locale === "sw" ? "Inachakata..." : "Processing...") : "Check in"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+
               <label className={styles.field}>
                 <span>
                   <i className="fa-solid fa-user" aria-hidden /> {locale === "sw" ? "Jina kamili *" : "Full name *"}
@@ -379,7 +551,7 @@ export default function SelfServicePage() {
               </label>
               <label className={styles.field}>
                 <span>
-                  <i className="fa-solid fa-building" aria-hidden /> {locale === "sw" ? "Kampuni *" : "Company *"}
+                  <i className="fa-solid fa-building" aria-hidden /> {locale === "sw" ? "Kampuni (si lazima)" : "Company (optional)"}
                 </span>
                 <input className={styles.input} value={company} onChange={(e) => setCompany(e.target.value)} />
               </label>

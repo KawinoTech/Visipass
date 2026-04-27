@@ -228,7 +228,7 @@ export function VisitorsTable({ visitors }: { visitors: VisitorRow[] }) {
       >
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1280 }}>
         <thead>
-          <tr style={{ background: "color-mix(in srgb, var(--brand-primary) 8%, white)" }}>
+          <tr style={{ background: "color-mix(in srgb, var(--brand-primary) 8%, var(--vp-card-bg))" }}>
             <th style={thStyle}>Name</th>
             <th style={thStyle}>Company</th>
             <th style={thStyle}>Phone</th>

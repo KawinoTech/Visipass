@@ -121,12 +121,17 @@
 .cardTitle {
   margin: 0;
   color: var(--vp-title);
-  font-size: 18px;
-  font-weight: 900;
+  font-size: 16px;
+  font-weight: 800;
 }
 
 .cardText {
   margin: 0;
   color: var(--vp-subtitle);
   font-size: 14px;
+  font-weight: 500;
+}
+
+.checkedInHeadRow {
+  background: color-mix(in srgb, var(--brand-primary) 8%, var(--vp-card-bg));
 }
